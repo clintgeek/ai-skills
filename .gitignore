@@ -1,2 +1,37 @@
 .windsurf-backup/
 *.bak
+
+# Environment and credentials
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+
+# Secrets and keys
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+.ssh/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temp files
+*.log
+logs/
+tmp/
+temp/
+
+# If we ever add a build step
+node_modules/
+dist/
+build/
