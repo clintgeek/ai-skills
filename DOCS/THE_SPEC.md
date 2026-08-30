@@ -1,0 +1,298 @@
+# ai-skills — Product Specification
+
+**Version:** 1.0  
+**Status:** Living document. Update this file whenever the repo structure, CLI, or supported tool set changes.
+
+---
+
+## 1. Purpose
+
+`ai-skills` is a single source of truth for every AI skill and global rule ("laws") I want all my AI coding assistants to share. It lives at `~/.ai/skills`, is backed by Git, and is designed so that a fresh laptop with nothing but `git` and one AI CLI (usually Devin) can be hotwired to the same skill set in minutes.
+
+The system has three goals:
+
+1. **One place to edit.** Add a skill here; all tools see it.
+2. **One place for rules.** Keep always-on constraints in `~/.ai/laws`; every hotwired tool reads the same `global_rules.md`.
+3. **One command to bootstrap.** `ai-setup` clones, inventories, installs missing tools, and hotwires skill and laws paths.
+
+---
+
+## 2. Core Concepts
+
+### 2.1 Skill
+
+A skill is a folder containing at minimum a `SKILL.md` file with YAML frontmatter.
+
+```markdown
+---
+name: my-skill
+description: What it does and when to use it.
+---
+
+# my-skill
+
+Instructions for the assistant.
+```
+
+Skills may also ship helper scripts in a `scripts/` subdirectory. The loader is responsible for finding `SKILL.md`; the content is opaque to the repo.
+
+### 2.2 Laws
+
+"Laws" are always-on rules that apply to every hotwired AI tool. They live in `~/.ai/laws/global_rules.md` (outside this repo by default, not versioned here). Each tool's global rules path is replaced with a symlink to that one file.
+
+Laws are for constraints that should survive across all tools: identity, tone, file-access rules, security policies, human-in-the-loop requirements, etc.
+
+### 2.3 Tool Registry
+
+`ai-setup/lib/ai-tools.sh` is the canonical registry of the 12 AI CLIs the system knows about. It stores:
+
+- Binary name
+- Display name
+- Model family
+- Install commands per OS
+- Install notes
+- Best-guess skill root
+- Best-guess laws root
+- Whether the path map is known to be correct
+
+Both `ai-setup` and `ai-battle` source this file. It is the only place these values should be maintained.
+
+### 2.4 Hotwiring
+
+"Hotwiring" means replacing a tool's global skill directory and laws file with symlinks to the shared `~/.ai/skills` and `~/.ai/laws/global_rules.md`.
+
+Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<timestamp>`. This is non-negotiable.
+
+---
+
+## 3. Directory & File Layout
+
+### 3.1 This repo (`~/.ai/skills`)
+
+```
+~/.ai/skills
+├── .gitignore
+├── LICENSE
+├── README.md
+├── DOCS/
+│   └── THE_SPEC.md
+├── ai-battle/
+│   ├── SKILL.md
+│   └── scripts/battle_runner.sh
+├── ai-setup/
+│   ├── SKILL.md
+│   ├── lib/ai-tools.sh
+│   └── scripts/ai-setup.sh
+└── ui-design/
+    └── SKILL.md
+```
+
+### 3.2 The user's `~/.ai` home
+
+```
+~/.ai/
+├── skills/        # this git repo
+└── laws/
+    └── global_rules.md
+```
+
+`~/.ai/laws` is intentionally outside the skills repo. Rules are local, may contain personal or machine-specific instructions, and are not meant to be shared the same way skills are.
+
+### 3.3 Tool root symlinks after setup
+
+```
+~/.claude/skills -> ~/.ai/skills
+~/.codeium/windsurf/skills -> ~/.ai/skills
+~/.copilot/skills -> ~/.ai/skills
+~/.config/devin/skills -> ~/.ai/skills
+~/.claude/CLAUDE.md -> ~/.ai/laws/global_rules.md
+~/.config/devin/global_rules.md -> ~/.ai/laws/global_rules.md
+~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
+```
+
+Tools with unverified path maps (`agy`, `gemini`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`.
+
+---
+
+## 4. User Flows
+
+### 4.1 First-time setup on a new machine
+
+1. Install one AI CLI, preferably Devin:
+
+   ```bash
+   curl -fsSL https://cli.devin.ai/install.sh | bash
+   ```
+
+2. Clone the repo:
+
+   ```bash
+   git clone git@github.com:clintgeek/ai-skills.git ~/.ai/skills
+   ```
+
+3. Run `ai-setup` inventory:
+
+   ```bash
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+   ```
+
+4. Hotwire each installed tool:
+
+   ```bash
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ```
+
+5. Install missing tools (optional, with confirmation):
+
+   ```bash
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ```
+
+6. Verify:
+
+   ```bash
+   devin skills list
+   ```
+
+### 4.2 Adding a new skill
+
+1. Create `~/.ai/skills/<skill-name>/SKILL.md` with proper frontmatter.
+2. Test that `devin skills list` shows it.
+3. `git add`, `git commit`, `git push`.
+4. On other machines, `git pull` inside `~/.ai/skills`.
+
+### 4.3 Adding a new AI CLI to the registry
+
+1. Edit `ai-setup/lib/ai-tools.sh`.
+2. Add binary, family, install commands per OS, skill/laws paths, and `KNOWN` flag.
+3. If the paths are verified, set `KNOWN=1`.
+4. Commit and push.
+
+`ai-battle --connect` and `ai-setup install <tool>` will immediately use the new entry.
+
+### 4.4 Re-running ai-setup
+
+`ai-setup` is idempotent:
+
+- Correct symlinks are left alone.
+- Broken symlinks are recreated.
+- Existing real directories are timestamped-backupped before replacement.
+- New skills in `~/.ai/skills` are picked up by all linked tools on their next skill reload.
+
+### 4.5 Running ai-battle
+
+`ai-battle` is an adversarial red-team review that uses this same tool registry to pick a challenger.
+
+```bash
+~/.ai/skills/ai-battle/scripts/battle_runner.sh --diff <range>
+```
+
+When a spec exists (e.g. this file or a feature-specific spec), pass it with `--spec`:
+
+```bash
+~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
+```
+
+The human must approve findings before any fixes are made.
+
+---
+
+## 5. Tool Integration Details
+
+| Binary | Family | Skills root | Laws root | Known |
+| :--- | :--- | :--- | :--- | :--- |
+| `devin` | cognition | `~/.config/devin/skills` | `~/.config/devin/global_rules.md` | yes |
+| `claude` | anthropic | `~/.claude/skills` | `~/.claude/CLAUDE.md` | yes |
+| `copilot` | github | `~/.copilot/skills` | `~/.copilot/copilot-instructions.md` | yes |
+| `agy` | google | `~/.antigravity/skills` | `~/.antigravity/global_rules.md` | no |
+| `gemini` | google | `~/.gemini/skills` | `~/.gemini/global_rules.md` | no |
+| `codex` | openai | `~/.codex/skills` | `~/.codex/global_rules.md` | no |
+| `opencode` | opencode | `~/.opencode/skills` | `~/.opencode/global_rules.md` | no |
+| `goose` | goose | `~/.goose/skills` | `~/.goose/global_rules.md` | no |
+| `aider` | aider | `~/.aider/skills` | `~/.aider/global_rules.md` | no |
+| `cursor-agent` | cursor | `~/.cursor/skills` | `~/.cursor/global_rules.md` | no |
+| `amp` | sourcegraph | `~/.amp/skills` | `~/.amp/global_rules.md` | no |
+| `qwen` | alibaba | `~/.qwen/skills` | `~/.qwen/global_rules.md` | no |
+
+A "no" in `Known` means the path has not been verified on a real install. Use `hotwire-generic` or promote it after confirming the layout.
+
+---
+
+## 6. Safety & Idempotency Rules
+
+1. **No destructive deletes.** Existing directories and files are always moved to `.<path>.bak-<timestamp>` before a symlink is created.
+2. **No silent self-battles.** `ai-battle` refuses to match a challenger in the same model family as the caller.
+3. **No auto-install without explicit consent.** `install <tool>` prints the command. `--yes` is required to run it.
+4. **No secrets in this repo.** `.gitignore` covers `.env`, `*.key`, `*.pem`, `secrets/`, `.ssh/`, and backup directories.
+5. **Prompt size guards.** `ai-battle` refuses to pass >100KB prompts via argv to tools that cannot accept stdin or files.
+6. **Challengers run read-only.** Devin `normal`, Claude `plan`, Codex `sandbox read-only`, aider `--dry-run`, etc.
+
+---
+
+## 7. CLI Reference
+
+### `ai-setup.sh`
+
+| Command | Description |
+| :--- | :--- |
+| `clone` | Clone `~/.ai/skills` if missing, create `~/.ai/laws` and starter `global_rules.md` |
+| `inventory` | Show installed state, known/unknown, skill and laws link status |
+| `hotwire <tool>` | Hotwire a known tool's skills and laws roots |
+| `hotwire-generic <tool> <skills> <laws>` | Hotwire a tool with explicit paths |
+| `install <tool>` | Print install command and notes |
+| `install <tool> --yes` | Print and run the install command |
+
+### `battle_runner.sh`
+
+| Flag | Description |
+| :--- | :--- |
+| `--diff <range>` | Git diff or revision range to review |
+| `--spec <file>` | Specification file for the reviewer |
+| `--opponent <tool>` | Force a specific challenger |
+| `--report <file>` | Where to write the raw challenger report |
+| `--timeout <s>` | Kill the challenger after this many seconds |
+| `--connect [tool]` | Show install menu for a tool |
+| `--yes` | With `--connect`, pre-confirm install |
+| `--list-tools` | List installed and missing AI CLIs |
+
+---
+
+## 8. Design Rationale
+
+### Why one `~/.ai/skills` git repo instead of per-tool plugin installs?
+
+Skills are mostly markdown and small scripts. Keeping them in one repo means one `git pull` syncs every tool. The per-tool skill loaders only care about file paths; symlinks let the repo stay single while each tool sees its own expected layout.
+
+### Why are laws outside the repo?
+
+Laws are personal and often machine-specific (e.g. which directories the assistant may write). They should not be committed to a shared repo by default. The repo documents the convention (`~/.ai/laws/global_rules.md`) but does not own the content.
+
+### Why is the tool registry in a shared bash library?
+
+`ai-battle` needs the registry to pick a challenger. `ai-setup` needs the same registry to hotwire and install. One source of truth (`ai-setup/lib/ai-tools.sh`) eliminates drift.
+
+### Why does `ai-battle` not run in the same process?
+
+The challenger must be a different model family to catch the builder's blind spots. Running it in a separate CLI process enforces that boundary.
+
+---
+
+## 9. Future Work
+
+- Promote more tools from `KNOWN=0` to `KNOWN=1` after real install tests.
+- Add CI that validates every `SKILL.md` has required frontmatter.
+- Add `ai-setup.sh sync` to pull the repo and re-hotwire in one command.
+- Consider a `~/.ai/laws` repo separate from skills for users who want versioned rules.
+- Add `TICKET-SPEC.md` template for battles that target a single feature.
+
+---
+
+## 10. How This Document Is Used
+
+- **For humans:** The source of truth for what the repo is trying to do.
+- **For AI assistants:** A specification to derive expected behavior from before touching code.
+- **For `ai-battle`:** Pass this file as `--spec` so the challenger can independently evaluate whether the implementation matches the spec.
+
+When the spec changes, commit the change immediately. A spec that drifts from the code is worse than no spec.
