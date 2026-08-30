@@ -3,6 +3,9 @@
 set -euo pipefail
 shopt -s nullglob
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../ai-setup/lib/ai-tools.sh"
+
 CALLER="${CALLING_AGENT:-}"
 OPPONENT=""
 SPEC_FILE=""
@@ -129,85 +132,20 @@ fi
 #   amp          Sourcegraph Amp CLI
 #   qwen         Qwen Code CLI (gemini-cli fork, Alibaba models)
 # ---------------------------------------------------------------------------
-KNOWN_TOOLS=(devin claude agy gemini copilot codex opencode goose aider cursor-agent amp qwen)
+# KNOWN_TOOLS, discover_tools, family_of, install_command, and install_note are sourced from ai-setup/lib/ai-tools.sh
 
-discover_tools() {
-  AVAILABLE=()
-  local tool
-  for tool in "${KNOWN_TOOLS[@]}"; do
-    if command -v "$tool" >/dev/null 2>&1; then
-      AVAILABLE+=("$tool")
-    fi
-  done
-  # Explicit success: under `set -e`, a final failed `command -v` would
-  # otherwise make the whole function (and script) exit nonzero.
-  return 0
-}
+# discover_tools() is provided by ai-setup/lib/ai-tools.sh
 
-# Map a tool/caller name to its model family so an agent never battles its
-# own architecture under a different binary name (agy and gemini are both
-# Google). Model-agnostic tools (opencode, goose, aider) count as their own
-# family — they may be running any backend, which the human can weigh.
-family_of() {
-  case "$1" in
-    agy|gemini) echo "google" ;;
-    claude) echo "anthropic" ;;
-    devin) echo "cognition" ;;
-    copilot) echo "github" ;;
-    codex) echo "openai" ;;
-    cursor-agent|cursor) echo "cursor" ;;
-    amp) echo "sourcegraph" ;;
-    qwen) echo "alibaba" ;;
-    *) echo "$1" ;;
-  esac
-}
+# family_of() is provided by ai-setup/lib/ai-tools.sh
 
 # ---------------------------------------------------------------------------
 # Connect: menu of known tools with assisted installation (like /connect)
 # ---------------------------------------------------------------------------
-OS_KIND="linux"
-case "$(uname -s)" in
-  Darwin) OS_KIND="mac" ;;
-  Linux) OS_KIND="linux" ;;
-  MINGW*|MSYS*|CYGWIN*) OS_KIND="windows" ;;
-esac
+# OS_KIND is provided by ai-setup/lib/ai-tools.sh
 
-# Recommended install command for the current OS. Commands ending in
-# "(PowerShell)" must be run in PowerShell and are never auto-executed.
-install_command() {
-  case "$1" in
-    devin)
-      if [[ "$OS_KIND" == "windows" ]]; then echo 'irm https://static.devin.ai/cli/setup.ps1 | iex  (PowerShell)'
-      else echo 'curl -fsSL https://cli.devin.ai/install.sh | bash'; fi ;;
-    claude)
-      if [[ "$OS_KIND" == "windows" ]]; then echo 'irm https://claude.ai/install.ps1 | iex  (PowerShell)'
-      else echo 'curl -fsSL https://claude.ai/install.sh | bash'; fi ;;
-    agy)
-      if [[ "$OS_KIND" == "windows" ]]; then echo 'irm https://antigravity.google/cli/install.ps1 | iex  (PowerShell)'
-      else echo 'curl -fsSL https://antigravity.google/cli/install.sh | bash'; fi ;;
-    gemini)       echo 'npm install -g @google/gemini-cli' ;;
-    copilot)      echo 'npm install -g @github/copilot' ;;
-    codex)        echo 'npm install -g @openai/codex' ;;
-    opencode)     echo 'curl -fsSL https://opencode.ai/install | bash' ;;
-    goose)        echo 'curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash' ;;
-    aider)        echo 'python -m pip install aider-install && aider-install' ;;
-    cursor-agent) echo 'curl https://cursor.com/install -fsS | bash' ;;
-    amp)          echo 'npm install -g @sourcegraph/amp' ;;
-    qwen)         echo 'npm install -g @qwen-code/qwen-code' ;;
-    *)            echo "" ;;
-  esac
-}
+# install_command() is provided by ai-setup/lib/ai-tools.sh
 
-install_note() {
-  case "$1" in
-    gemini) echo "Note: Google is transitioning gemini-cli to Antigravity (agy) — consider installing agy instead." ;;
-    codex)  [[ "$OS_KIND" == "mac" ]] && echo "Alternative: brew install codex" ;;
-    claude) echo "Alternative: npm install -g @anthropic-ai/claude-code" ;;
-    opencode) echo "Alternative: npm install -g opencode-ai" ;;
-    *) echo "" ;;
-  esac
-  return 0
-}
+# install_note() is provided by ai-setup/lib/ai-tools.sh
 
 print_connect_menu() {
   echo ""

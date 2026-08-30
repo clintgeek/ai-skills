@@ -54,13 +54,19 @@ Always prefer the built-in map for the 12 above. Ask the user before running `ho
 
 ## 4. Install missing tools
 
-If the user wants a missing tool, the install command menu is the same one `ai-battle` already has:
+If the user wants a missing tool, get the install command from the shared registry:
 
 ```bash
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect <tool>
+~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
 ```
 
-Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
+Add `--yes` to run the install command automatically:
+
+```bash
+~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+```
+
+The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-tools.sh`; both `ai-setup` and `ai-battle --connect` use the same source, so nothing is duplicated. Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
 
 ## 5. Re-run behavior
 

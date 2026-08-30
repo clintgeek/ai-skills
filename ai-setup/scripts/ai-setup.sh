@@ -2,6 +2,9 @@
 # ai-setup: bootstrap and hotwire AI CLI tools to ~/.ai/skills and ~/.ai/laws
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../lib/ai-tools.sh"
+
 AI_SKILLS="${AI_SKILLS:-$HOME/.ai/skills}"
 AI_LAWS="${AI_LAWS:-$HOME/.ai/laws}"
 AI_REPO="${AI_REPO:-git@github.com:clintgeek/ai-skills.git}"
@@ -19,7 +22,8 @@ Commands:
   hotwire <tool>       Hotwire a known tool's skills + laws
   hotwire-generic <tool> <skills-path> <laws-path>
                        Hotwire any tool with explicit paths
-  install <tool>       Show install help for a tool (calls ai-battle --connect)
+  install <tool> [--yes]
+                       Show install command for a tool; --yes runs it
 
 Environment:
   AI_SKILLS, AI_LAWS, AI_REPO can override defaults.
@@ -79,77 +83,6 @@ EOF
   log "  linked $target -> $GLOBAL_RULES"
 }
 
-tool_info() {
-  local t="$1"
-  case "$t" in
-    devin)
-      SKILLS_ROOT="$HOME/.config/devin/skills"
-      LAWS_ROOT="$HOME/.config/devin/global_rules.md"
-      KNOWN=1
-      ;;
-    claude)
-      SKILLS_ROOT="$HOME/.claude/skills"
-      LAWS_ROOT="$HOME/.claude/CLAUDE.md"
-      KNOWN=1
-      ;;
-    agy)
-      SKILLS_ROOT="$HOME/.antigravity/skills"
-      LAWS_ROOT="$HOME/.antigravity/global_rules.md"
-      KNOWN=0
-      ;;
-    gemini)
-      SKILLS_ROOT="$HOME/.gemini/skills"
-      LAWS_ROOT="$HOME/.gemini/global_rules.md"
-      KNOWN=0
-      ;;
-    copilot)
-      SKILLS_ROOT="$HOME/.copilot/skills"
-      LAWS_ROOT="$HOME/.copilot/copilot-instructions.md"
-      KNOWN=1
-      ;;
-    codex)
-      SKILLS_ROOT="$HOME/.codex/skills"
-      LAWS_ROOT="$HOME/.codex/global_rules.md"
-      KNOWN=0
-      ;;
-    opencode)
-      SKILLS_ROOT="$HOME/.opencode/skills"
-      LAWS_ROOT="$HOME/.opencode/global_rules.md"
-      KNOWN=0
-      ;;
-    goose)
-      SKILLS_ROOT="$HOME/.goose/skills"
-      LAWS_ROOT="$HOME/.goose/global_rules.md"
-      KNOWN=0
-      ;;
-    aider)
-      SKILLS_ROOT="$HOME/.aider/skills"
-      LAWS_ROOT="$HOME/.aider/global_rules.md"
-      KNOWN=0
-      ;;
-    cursor-agent)
-      SKILLS_ROOT="$HOME/.cursor/skills"
-      LAWS_ROOT="$HOME/.cursor/global_rules.md"
-      KNOWN=0
-      ;;
-    amp)
-      SKILLS_ROOT="$HOME/.amp/skills"
-      LAWS_ROOT="$HOME/.amp/global_rules.md"
-      KNOWN=0
-      ;;
-    qwen)
-      SKILLS_ROOT="$HOME/.qwen/skills"
-      LAWS_ROOT="$HOME/.qwen/global_rules.md"
-      KNOWN=0
-      ;;
-    *)
-      SKILLS_ROOT=""
-      LAWS_ROOT=""
-      KNOWN=0
-      ;;
-  esac
-}
-
 cmd_clone() {
   log "clone"
   if [[ ! -d "$AI_SKILLS/.git" ]]; then
@@ -175,26 +108,24 @@ EOF
 
 cmd_inventory() {
   log "inventory"
-  local tools=(devin claude agy gemini copilot codex opencode goose aider cursor-agent amp qwen)
   printf "\n%-14s %-10s %-8s %-8s %-8s\n" "tool" "installed" "known" "skills" "laws"
-  for t in "${tools[@]}"; do
-    tool_info "$t"
-    local installed="no"
-    local skills="no"
-    local laws="no"
-    local known="no"
-    if command -v "$t" &>/dev/null; then
+  local t
+  for t in "${AI_TOOLS[@]}"; do
+    local installed="no" skills="no" laws="no" known="no"
+    local skills_root="${TOOL_SKILLS[$t]}"
+    local laws_root="${TOOL_LAWS[$t]}"
+    if command -v "$t" >/dev/null 2>&1; then
       installed="yes"
     fi
-    [[ "$KNOWN" -eq 1 ]] && known="yes"
-    if [[ -L "$SKILLS_ROOT" && "$(readlink "$SKILLS_ROOT")" == "$AI_SKILLS" ]]; then
+    [[ "${TOOL_KNOWN[$t]:-0}" -eq 1 ]] && known="yes"
+    if [[ -L "$skills_root" && "$(readlink "$skills_root")" == "$AI_SKILLS" ]]; then
       skills="yes"
-    elif [[ -d "$SKILLS_ROOT" && ! -L "$SKILLS_ROOT" ]]; then
+    elif [[ -d "$skills_root" && ! -L "$skills_root" ]]; then
       skills="dir"
     fi
-    if [[ -L "$LAWS_ROOT" && "$(readlink "$LAWS_ROOT")" == "$GLOBAL_RULES" ]]; then
+    if [[ -L "$laws_root" && "$(readlink "$laws_root")" == "$GLOBAL_RULES" ]]; then
       laws="yes"
-    elif [[ -e "$LAWS_ROOT" && ! -L "$LAWS_ROOT" ]]; then
+    elif [[ -e "$laws_root" && ! -L "$laws_root" ]]; then
       laws="file"
     fi
     printf "%-14s %-10s %-8s %-8s %-8s\n" "$t" "$installed" "$known" "$skills" "$laws"
@@ -203,18 +134,19 @@ cmd_inventory() {
 
 cmd_hotwire() {
   local t="$1"
-  tool_info "$t"
+  local skills_root="${TOOL_SKILLS[$t]}"
+  local laws_root="${TOOL_LAWS[$t]}"
   log "hotwire $t"
-  if [[ "$KNOWN" -ne 1 ]]; then
+  if [[ -z "$skills_root" || "${TOOL_KNOWN[$t]:-0}" -ne 1 ]]; then
     log "  $t has no built-in path map. Use: ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>"
     exit 1
   fi
-  if ! command -v "$t" &>/dev/null; then
+  if ! command -v "$t" >/dev/null 2>&1; then
     log "  $t not installed. Install it first with: ai-setup.sh install $t"
     exit 1
   fi
-  link_skills "$SKILLS_ROOT"
-  link_laws "$LAWS_ROOT"
+  link_skills "$skills_root"
+  link_laws "$laws_root"
   log "  $t hotwired"
 }
 
@@ -223,7 +155,7 @@ cmd_hotwire_generic() {
   local skills="$2"
   local laws="$3"
   log "hotwire-generic $t"
-  if ! command -v "$t" &>/dev/null; then
+  if ! command -v "$t" >/dev/null 2>&1; then
     log "  $t not installed. Install it first."
     exit 1
   fi
@@ -233,15 +165,62 @@ cmd_hotwire_generic() {
 }
 
 cmd_install() {
-  local t="$1"
-  local runner="$AI_SKILLS/ai-battle/scripts/battle_runner.sh"
-  if [[ ! -x "$runner" ]]; then
-    log "ai-battle runner not found at $runner"
-    log "clone or pull the repo and try again"
+  local t="" yes=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes) yes=true; shift ;;
+      -h|--help) usage; exit 0 ;;
+      -*) echo "Unknown install option: $1" >&2; exit 1 ;;
+      *)
+        if [[ -z "$t" ]]; then t="$1"; shift
+        else echo "Unexpected argument: $1" >&2; exit 1; fi
+        ;;
+    esac
+  done
+  if [[ -z "$t" ]]; then
+    usage
     exit 1
   fi
-  log "install menu for $t"
-  "$runner" --connect "$t"
+  if [[ ! " ${AI_TOOLS[@]} " =~ " $t " ]]; then
+    log "unknown tool: $t"
+    exit 1
+  fi
+  if command -v "$t" >/dev/null 2>&1; then
+    log "$t already installed at $(command -v "$t")"
+    return 0
+  fi
+  local cmd note
+  cmd="$(install_command "$t")"
+  note="$(install_note "$t")"
+  log "install $t"
+  echo "  $cmd"
+  [[ -n "$note" ]] && echo "  $note"
+  if [[ "$cmd" == *"(PowerShell)"* ]]; then
+    log "PowerShell command; not auto-executable from bash"
+    return 0
+  fi
+  if [[ "$yes" != true ]]; then
+    if [[ -t 0 ]]; then
+      local answer
+      read -r -p "Run it now? [y/N] " answer
+      [[ "$answer" =~ ^[Yy]$ ]] || { log "Skipped."; return 0; }
+    else
+      log "Non-interactive: re-run with --yes, or run the command yourself"
+      return 0
+    fi
+  fi
+  log "Installing $t..."
+  if bash -c "$cmd"; then
+    hash -r 2>/dev/null || true
+    if command -v "$t" >/dev/null 2>&1; then
+      log "✓ $t installed at $(command -v "$t")"
+    else
+      log "installer finished but $t not on PATH yet"
+    fi
+  else
+    log "✗ install failed for $t"
+    return 1
+  fi
 }
 
 main() {
@@ -269,8 +248,7 @@ main() {
       cmd_hotwire_generic "$1" "$2" "$3"
       ;;
     install)
-      [[ $# -lt 1 ]] && { usage; exit 1; }
-      cmd_install "$1"
+      cmd_install "$@"
       ;;
     -h|--help|help)
       usage
