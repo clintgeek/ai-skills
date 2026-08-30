@@ -10,7 +10,7 @@ case "$(uname -s)" in
 esac
 
 # List of tool binary names in the battle/setup registry.
-AI_TOOLS=(devin claude agy gemini copilot codex opencode goose aider cursor-agent amp qwen)
+AI_TOOLS=(devin claude agy copilot codex opencode goose aider cursor-agent amp qwen)
 
 # Backwards-compatible alias for ai-battle.
 KNOWN_TOOLS=("${AI_TOOLS[@]}")
@@ -19,7 +19,6 @@ declare -A TOOL_NAME
 TOOL_NAME[devin]="Cognition Devin CLI"
 TOOL_NAME[claude]="Anthropic Claude Code"
 TOOL_NAME[agy]="Google Antigravity CLI"
-TOOL_NAME[gemini]="Google Gemini CLI (older)"
 TOOL_NAME[copilot]="GitHub Copilot CLI"
 TOOL_NAME[codex]="OpenAI Codex CLI"
 TOOL_NAME[opencode]="opencode"
@@ -33,7 +32,6 @@ declare -A TOOL_FAMILY
 TOOL_FAMILY[devin]="cognition"
 TOOL_FAMILY[claude]="anthropic"
 TOOL_FAMILY[agy]="google"
-TOOL_FAMILY[gemini]="google"
 TOOL_FAMILY[copilot]="github"
 TOOL_FAMILY[codex]="openai"
 TOOL_FAMILY[opencode]="opencode"
@@ -47,7 +45,6 @@ declare -A TOOL_INSTALL_LINUX
 TOOL_INSTALL_LINUX[devin]='curl -fsSL https://cli.devin.ai/install.sh | bash'
 TOOL_INSTALL_LINUX[claude]='curl -fsSL https://claude.ai/install.sh | bash'
 TOOL_INSTALL_LINUX[agy]='curl -fsSL https://antigravity.google/cli/install.sh | bash'
-TOOL_INSTALL_LINUX[gemini]='npm install -g @google/gemini-cli'
 TOOL_INSTALL_LINUX[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_LINUX[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_LINUX[opencode]='curl -fsSL https://opencode.ai/install | bash'
@@ -61,7 +58,6 @@ declare -A TOOL_INSTALL_MAC
 TOOL_INSTALL_MAC[devin]='curl -fsSL https://cli.devin.ai/install.sh | bash'
 TOOL_INSTALL_MAC[claude]='curl -fsSL https://claude.ai/install.sh | bash'
 TOOL_INSTALL_MAC[agy]='curl -fsSL https://antigravity.google/cli/install.sh | bash'
-TOOL_INSTALL_MAC[gemini]='npm install -g @google/gemini-cli'
 TOOL_INSTALL_MAC[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_MAC[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_MAC[opencode]='curl -fsSL https://opencode.ai/install | bash'
@@ -75,7 +71,6 @@ declare -A TOOL_INSTALL_WINDOWS
 TOOL_INSTALL_WINDOWS[devin]='irm https://static.devin.ai/cli/setup.ps1 | iex  (PowerShell)'
 TOOL_INSTALL_WINDOWS[claude]='irm https://claude.ai/install.ps1 | iex  (PowerShell)'
 TOOL_INSTALL_WINDOWS[agy]='irm https://antigravity.google/cli/install.ps1 | iex  (PowerShell)'
-TOOL_INSTALL_WINDOWS[gemini]='npm install -g @google/gemini-cli'
 TOOL_INSTALL_WINDOWS[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_WINDOWS[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_WINDOWS[opencode]='curl -fsSL https://opencode.ai/install | bash'
@@ -86,7 +81,6 @@ TOOL_INSTALL_WINDOWS[amp]='npm install -g @sourcegraph/amp'
 TOOL_INSTALL_WINDOWS[qwen]='npm install -g @qwen-code/qwen-code'
 
 declare -A TOOL_INSTALL_NOTE
-TOOL_INSTALL_NOTE[gemini]="Note: Google is transitioning gemini-cli to Antigravity (agy) — consider installing agy instead."
 TOOL_INSTALL_NOTE[codex]="Alternative: brew install codex"
 TOOL_INSTALL_NOTE[claude]="Alternative: npm install -g @anthropic-ai/claude-code"
 TOOL_INSTALL_NOTE[opencode]="Alternative: npm install -g opencode-ai"
@@ -96,7 +90,6 @@ declare -A TOOL_SKILLS
 TOOL_SKILLS[devin]="$HOME/.config/devin/skills"
 TOOL_SKILLS[claude]="$HOME/.claude/skills"
 TOOL_SKILLS[agy]="$HOME/.antigravity/skills"
-TOOL_SKILLS[gemini]="$HOME/.gemini/skills"
 TOOL_SKILLS[copilot]="$HOME/.copilot/skills"
 TOOL_SKILLS[codex]="$HOME/.codex/skills"
 TOOL_SKILLS[opencode]="$HOME/.opencode/skills"
@@ -110,7 +103,6 @@ declare -A TOOL_LAWS
 TOOL_LAWS[devin]="$HOME/.config/devin/global_rules.md"
 TOOL_LAWS[claude]="$HOME/.claude/CLAUDE.md"
 TOOL_LAWS[agy]="$HOME/.antigravity/global_rules.md"
-TOOL_LAWS[gemini]="$HOME/.gemini/global_rules.md"
 TOOL_LAWS[copilot]="$HOME/.copilot/copilot-instructions.md"
 TOOL_LAWS[codex]="$HOME/.codex/global_rules.md"
 TOOL_LAWS[opencode]="$HOME/.opencode/global_rules.md"
@@ -124,8 +116,7 @@ declare -A TOOL_KNOWN
 TOOL_KNOWN[devin]=1
 TOOL_KNOWN[claude]=1
 TOOL_KNOWN[copilot]=1
-TOOL_KNOWN[agy]=0
-TOOL_KNOWN[gemini]=0
+TOOL_KNOWN[agy]=1
 TOOL_KNOWN[codex]=0
 TOOL_KNOWN[opencode]=0
 TOOL_KNOWN[goose]=0

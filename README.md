@@ -23,7 +23,7 @@ fi
 ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
 ```
 
-This shows which of the 12 tracked AI CLIs are installed and which are already hotwired.
+This shows which of the 11 tracked AI CLIs are installed and which are already hotwired.
 
 ### 3. Hotwire every installed tool
 
@@ -33,7 +33,7 @@ For each tool that shows `installed: yes`, run:
 ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
 ```
 
-Valid names: `devin`, `claude`, `agy`, `gemini`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
+Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
 
 If a tool is installed but has no built-in path map, use `hotwire-generic` with paths the user provides, or ask before touching it:
 
@@ -133,7 +133,7 @@ and `hotwire` anything that is not yet linked. Backups are timestamped, so repea
 - `ai-setup/` — the setup skill and shared tool registry.
   - `SKILL.md` — the full prompt for an AI assistant.
   - `scripts/ai-setup.sh` — the setup runner.
-  - `lib/ai-tools.sh` — the 12-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
+  - `lib/ai-tools.sh` — the 11-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
 - `ai-battle/` — adversarial cross-model code review skill.
   - `SKILL.md` — the battle prompt.
   - `scripts/battle_runner.sh` — the battle dispatcher.

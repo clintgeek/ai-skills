@@ -44,7 +44,7 @@ Laws are for constraints that should survive across all tools: identity, tone, f
 
 ### 2.3 Tool Registry
 
-`ai-setup/lib/ai-tools.sh` is the canonical registry of the 12 AI CLIs the system knows about. It stores:
+`ai-setup/lib/ai-tools.sh` is the canonical registry of the 11 AI CLIs the system knows about. It stores:
 
 - Binary name
 - Display name
@@ -110,7 +110,7 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
 ```
 
-Tools with unverified path maps (`agy`, `gemini`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`.
+Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`.
 
 ---
 
@@ -206,8 +206,8 @@ The human must approve findings before any fixes are made.
 | `devin` | cognition | `~/.config/devin/skills` | `~/.config/devin/global_rules.md` | yes |
 | `claude` | anthropic | `~/.claude/skills` | `~/.claude/CLAUDE.md` | yes |
 | `copilot` | github | `~/.copilot/skills` | `~/.copilot/copilot-instructions.md` | yes |
-| `agy` | google | `~/.antigravity/skills` | `~/.antigravity/global_rules.md` | no |
-| `gemini` | google | `~/.gemini/skills` | `~/.gemini/global_rules.md` | no |
+| `agy` | google | `~/.antigravity/skills` | `~/.antigravity/global_rules.md` | yes |
+
 | `codex` | openai | `~/.codex/skills` | `~/.codex/global_rules.md` | no |
 | `opencode` | opencode | `~/.opencode/skills` | `~/.opencode/global_rules.md` | no |
 | `goose` | goose | `~/.goose/skills` | `~/.goose/global_rules.md` | no |

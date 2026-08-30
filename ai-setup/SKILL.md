@@ -20,7 +20,7 @@ Use this skill when the user wants to:
 
 ## 2. Inventory
 
-Run `~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory` to see which of the 12 ai-battle CLI tools are installed and which are already hotwired.
+Run `~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory` to see which of the 11 ai-battle CLI tools are installed and which are already hotwired.
 
 The registry is:
 
@@ -29,7 +29,6 @@ The registry is:
 | `devin` | Cognition Devin CLI | cognition |
 | `claude` | Anthropic Claude Code | anthropic |
 | `agy` | Google Antigravity CLI | google |
-| `gemini` | Google Gemini CLI (older) | google |
 | `copilot` | GitHub Copilot CLI | github |
 | `codex` | OpenAI Codex CLI | openai |
 | `opencode` | opencode | opencode |

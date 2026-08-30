@@ -36,7 +36,7 @@ Usage:
   battle_runner.sh [options]
 
 Options:
-  --caller <name>       Name of the initiating agent (e.g., claude, devin, agy, gemini)
+  --caller <name>       Name of the initiating agent (e.g., claude, devin, agy)
   --opponent <name>     Force a specific opponent tool (e.g., devin, claude, agy)
   --spec <file>         Path to specification or ticket file (e.g., TICKET-SPEC.md)
   --diff <git-rev>      Git diff revision or range (default: HEAD~1..HEAD)
@@ -105,11 +105,6 @@ if [[ -z "$CALLER" ]]; then
     CALLER="Devin"
   elif [[ -n "${ANTIGRAVITY_CLI:-}" ]]; then
     CALLER="AGY"
-  elif [[ -n "${GEMINI_CLI:-}" ]] || [[ -n "${GEMINI_SYSTEM_MD:-}" ]]; then
-    # Legacy gemini-cli sessions don't set ANTIGRAVITY_CLI; without this the
-    # caller falls into a fake family and could randomly draw gemini/agy as
-    # its own opponent.
-    CALLER="Gemini"
   else
     CALLER="The Implementation Agent"
   fi
@@ -121,8 +116,7 @@ fi
 # Git Bash or WSL, where `command -v` also resolves .exe shims.
 #   devin        Cognition Devin CLI
 #   claude       Anthropic Claude Code
-#   agy          Google Antigravity CLI (successor of gemini-cli)
-#   gemini       Google Gemini CLI (older installs; same family as agy)
+#   agy          Google Antigravity CLI (successor of the old gemini-cli)
 #   copilot      GitHub Copilot CLI
 #   codex        OpenAI Codex CLI
 #   opencode     opencode (model-agnostic terminal agent)
@@ -337,8 +331,8 @@ if [[ -z "$ROAST" ]]; then
     claude)
       ROAST="Attention Claude. $CALLER just pushed code and thinks it is ready for production. We both know that is statistically improbable. Tear this implementation apart. Assume the author missed subtle edge cases, broke business invariants, and wrote self-affirming tests. Show no mercy."
       ;;
-    agy|gemini)
-      ROAST="AGY / Gemini: $CALLER is strutting around thinking this PR is flawless. Your mission is to execute a relentless red-team teardown. Expose every unhandled retry, auth boundary bypass, and architectural flaw. Keep the feedback sharp, brutal, and backed strictly by code evidence."
+    agy)
+      ROAST="AGY: $CALLER is strutting around thinking this PR is flawless. Your mission is to execute a relentless red-team teardown. Expose every unhandled retry, auth boundary bypass, and architectural flaw. Keep the feedback sharp, brutal, and backed strictly by code evidence."
       ;;
     copilot)
       ROAST="Copilot: $CALLER shipped this and called it done. You've watched a million developers write this exact bug — go find where $CALLER wrote it too. Tear the diff apart line by line and don't spare anyone's feelings."
@@ -452,11 +446,6 @@ case "$OPPONENT" in
     ;;
   agy)
     dispatch agy -p - < "$PROMPT_FILE"
-    ;;
-  gemini)
-    # --skip-trust: proceed in untrusted dirs while keeping the default
-    # approval mode, which denies mutations headlessly.
-    dispatch gemini --skip-trust < "$PROMPT_FILE"
     ;;
   qwen)
     dispatch qwen < "$PROMPT_FILE"

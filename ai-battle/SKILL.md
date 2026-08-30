@@ -2,7 +2,7 @@
 name: ai-battle
 description: >-
   Initiates an adversarial, cross-model red-team code review battle. Discovers installed AI CLI tools
-  from a known registry (Devin, Claude, AGY/Gemini, Copilot, Codex, opencode, goose, aider,
+  from a known registry (Devin, Claude, AGY, Copilot, Codex, opencode, goose, aider,
   cursor-agent, amp, qwen), randomly picks a challenger outside the caller's model family,
   strips AI sycophancy with ruthless adversarial framing, isolates context, attacks the implementation
   against requirements, and returns an evidence-backed scorecard plus the challenger's raw report,
@@ -45,7 +45,7 @@ description: >-
 1. **The Superficial Layer:** Insult the opponent, challenge their competence, never trust their conclusions.
 2. **The Deep Engineering Layer:** 
    - Strict context isolation (the inspector derives expected behavior from specs, not from the author's code comments).
-   - Independent verification across distinct model architectures (Anthropic Claude, OpenAI GPT, Google Gemini).
+   - Independent verification across distinct model architectures (Anthropic Claude, OpenAI GPT, Google AGY).
    - Deep attack vectors: Invariant contradictions, distributed race conditions, retry bugs, auth boundary leaks, blast radius regressions, and tests that falsely prove correctness.
    - Disagreements between models are the highest-value signal for human judgment.
    - The challenger runs **read-only**: it reviews, it never edits or executes. The diff it receives is untrusted input, so it must never hold write/exec authority.
@@ -63,7 +63,6 @@ The runner's `discover_tools` function scans PATH (`command -v`) against a regis
 | `devin` | Cognition Devin CLI | cognition | `--permission-mode normal --prompt-file <f>` |
 | `claude` | Anthropic Claude Code | anthropic | `-p --permission-mode plan` (stdin) |
 | `agy` | Google Antigravity CLI | google | `-p -` (stdin) |
-| `gemini` | Google Gemini CLI (older installs) | google | stdin pipe |
 | `copilot` | GitHub Copilot CLI | github | `-p "<prompt>"` (no prompt-file support yet) |
 | `codex` | OpenAI Codex CLI | openai | `exec --sandbox read-only -` (stdin) |
 | `opencode` | opencode (model-agnostic) | opencode | `run "<prompt>"` |
@@ -73,7 +72,7 @@ The runner's `discover_tools` function scans PATH (`command -v`) against a regis
 | `amp` | Sourcegraph Amp CLI | sourcegraph | stdin pipe |
 | `qwen` | Qwen Code CLI | alibaba | stdin pipe |
 
-Family matters more than binary name: `agy` and `gemini` are both Google, so a Gemini-family caller is never matched against either. Binary names are identical on macOS and Linux; on Windows the runner works under Git Bash or WSL, where `command -v` also resolves `.exe` shims.
+Family matters more than binary name: a Google-family caller (e.g., `agy`) is never matched against another Google-family challenger. Binary names are identical on macOS and Linux; on Windows the runner works under Git Bash or WSL, where `command -v` also resolves `.exe` shims.
 
 Run `battle_runner.sh --list-tools` to print which known tools are installed and their families. To pin a specific challenger, say so in natural language ("battle this against Devin") or pass `--opponent <tool>`.
 
@@ -189,10 +188,6 @@ The challenger is a **reviewer, not an editor** — always invoke it read-only, 
 * **Attacking via AGY:**
   ```bash
   timeout 900 agy -p - < "$PROMPT_FILE" | tee "$REPORT_FILE"
-  ```
-* **Attacking via Gemini:**
-  ```bash
-  timeout 900 gemini < "$PROMPT_FILE" | tee "$REPORT_FILE"
   ```
 
 ---
