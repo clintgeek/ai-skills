@@ -5,7 +5,8 @@ description: >-
   from a known registry (Devin, Claude, AGY, Copilot, Codex, opencode, goose, aider,
   cursor-agent, amp, qwen), randomly picks a challenger outside the caller's model family,
   strips AI sycophancy with ruthless adversarial framing, isolates context, attacks the implementation
-  against requirements, and returns an evidence-backed scorecard plus the challenger's raw report,
+  against requirements (scaffolding a DRAFT spec via the shared lib/spec_builder.sh when none exists,
+  filled by interviewing the human per lib/SPEC_INTERVIEW.md before battle), and returns an evidence-backed scorecard plus the challenger's raw report,
   pausing for human sign-off before any fixes. Also handles "connect"/"add a challenger" requests
   via a /connect-style install menu (--connect).
 ---
@@ -23,7 +24,8 @@ description: >-
       │
       ├── 2. Pick a different tool than the current executing agent
       │
-      ├── 3. Establish the target (git diff + ticket / spec)
+      ├── 3. Establish the target (git diff + ticket / spec;
+      │      no spec? scaffold one and fill it from the original ask)
       │
       ├── 4. Shit-talk the opposing model (strip sycophancy & politeness)
       │
@@ -108,6 +110,35 @@ When the user says "connect", "add a challenger", or "install <tool>", the agent
 * The author's explanations of *why* they wrote it this way.
 * Prior "LGTM" or test-pass claims.
 
+### When no spec exists: build one first
+
+Spec discovery and scaffolding live in the **shared** `~/.ai/skills/lib/spec_builder.sh` (usable by any skill, as a CLI or by sourcing its functions). If `battle_runner.sh` finds no spec, it scaffolds a DRAFT `TICKET-SPEC.md` — pre-filled with neutral git evidence (branch, commit subjects, diffstat, detected ticket IDs) and TODO requirement sections — and **exits with code 3 instead of battling**. An unfilled scaffold grounds the review in nothing, so the runner also refuses any spec whose DRAFT banner is still intact.
+
+The builder agent's job at that point is to **interview the human, not to author the requirements itself** — full protocol in `~/.ai/skills/lib/SPEC_INTERVIEW.md`:
+
+1. Interrogate the user about the four sections (Intent, Requirements, Out of Scope, Invariants), one at a time, pushing vague answers into independently testable criteria. Candidate answers may be *proposed* from the original ticket/request/conversation for the human to confirm or correct — never sourced from the code or the diff. A spec reverse-engineered from the implementation can only prove the code does what the code does, which turns the battle into a rubber stamp.
+2. Write the confirmed answers into sections 1–4 and delete the DRAFT banner block at the top of the file.
+3. Show the finished spec to the human, then re-run the battle; the spec is picked up automatically.
+
+A human at a terminal can run the interview directly instead — `spec_builder.sh` prompts them for each section and, when Intent and Requirements are answered, writes a banner-free, battle-ready spec:
+
+```bash
+~/.ai/skills/lib/spec_builder.sh ensure --interactive
+```
+
+**Repos without tickets:** the conversation that requested the work *is* the ticket. The interview reconstructs and confirms it — quote the human's original ask back as the Intent proposal, and keep their stated requirements separate from anything the builder merely inferred while coding (inferences need explicit confirmation; see the protocol's "When there is no ticket" section). Better still, don't wait for the battle: run `spec_builder.sh ensure` when the ask first lands and interview then, while the requirements are fresh — the battle picks the file up automatically later.
+
+If no requirements source exists at all and the human declines the interview, run `--no-spec` with their consent to battle without spec grounding (independent spec derivation is loudly disabled).
+
+The same find→interview→write flow is directly invocable as the **`/spec-builder`** skill (a thin wrapper over the shared lib). Standalone usage for other skills:
+
+```bash
+~/.ai/skills/lib/spec_builder.sh find                  # print existing spec path, rc 1 if none
+~/.ai/skills/lib/spec_builder.sh ensure                # find, else scaffold (rc 3 = new DRAFT)
+~/.ai/skills/lib/spec_builder.sh ensure --interactive  # find, else interview the human (TTY only)
+~/.ai/skills/lib/spec_builder.sh build --diff main...HEAD --title "PROJ-123"
+```
+
 ---
 
 ## 4. The Battle Prompt Structure
@@ -154,6 +185,9 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 # Target specific spec and diff
 ~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec TICKET-SPEC.md --diff main...HEAD
 
+# Explicitly battle without spec grounding (weaker review, loud warning)
+~/.ai/skills/ai-battle/scripts/battle_runner.sh --no-spec
+
 # Force a specific opponent
 ~/.ai/skills/ai-battle/scripts/battle_runner.sh --opponent devin
 
@@ -171,7 +205,7 @@ Safety behavior built into the runner:
 * **Argv size guard.** Tools with no stdin/file input (copilot, opencode, cursor-agent) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
 * **Timeout.** The challenger is killed after `--timeout` seconds (default 900).
 * **Verbatim report.** The challenger's stdout is tee'd to the `--report` file for the human, unfiltered by the builder; stderr diagnostics (auth failures, rate limits) are kept in a companion `.stderr.log`.
-* **Spec required for full rigor.** A missing spec no longer fails the battle, but the runner warns loudly that independent spec derivation is disabled.
+* **Spec required for full rigor.** A missing spec scaffolds a DRAFT `TICKET-SPEC.md` (shared `lib/spec_builder.sh`) and exits with code 3 so the builder can fill in real requirements; a spec whose DRAFT banner is still intact is refused the same way. This happens before challenger selection, so the spec gets scaffolded even when no eligible opponent is installed. Spec-less `--dry-run` also refuses (exit 3, writes nothing) — there is no spec-less prompt a real run would ever execute. `--no-spec` is the explicit opt-out for all of it, and it warns loudly that independent spec derivation is disabled.
 
 ### Option B: Direct CLI Invocations
 

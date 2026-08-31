@@ -57,7 +57,14 @@ Laws are for constraints that should survive across all tools: identity, tone, f
 
 Both `ai-setup` and `ai-battle` source this file. It is the only place these values should be maintained.
 
-### 2.4 Hotwiring
+### 2.4 Shared tools (`lib/`)
+
+Repo-root `lib/` holds helper scripts shared across skills (as opposed to `ai-setup/lib/ai-tools.sh`, which predates it and stays put for compatibility). Each is written to work both as a CLI and as a sourceable bash library. Current entries:
+
+- `lib/spec_builder.sh` — spec discovery (`find`), scaffolding (`build`), and find-or-scaffold (`ensure`). Scaffolds a DRAFT `TICKET-SPEC.md` pre-filled with neutral git evidence (branch, commits, diffstat, ticket IDs) and TODO requirement sections that must be filled from the original ticket/request — never reverse-engineered from the code. `--interactive` interviews the human at the terminal for the four sections and writes a banner-free spec when Intent and Requirements are answered. Consumers: `ai-battle`, and the `spec-builder` skill — a thin wrapper that makes the find→interview→write flow directly invocable as `/spec-builder` (any skill needing a spec should source the lib rather than copying the logic).
+- `lib/SPEC_INTERVIEW.md` — the spec interview protocol for AI agents, which have no TTY for `--interactive`. The agent interrogates the human section by section (proposing candidates only from the ticket/request/conversation, never the diff), writes the confirmed answers into the spec, deletes the DRAFT banner, and gets sign-off. Covers ticket-less repos, where the requesting conversation is the ticket: quote the original ask, confirm builder inferences explicitly, and capture the spec when the ask lands rather than at review time.
+
+### 2.5 Hotwiring
 
 "Hotwiring" means replacing a tool's global skill directory and laws file with symlinks to the shared `~/.ai/skills` and `~/.ai/laws/global_rules.md`.
 
@@ -76,6 +83,12 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ├── README.md
 ├── DOCS/
 │   └── THE_SPEC.md
+├── lib/
+│   ├── spec_builder.sh
+│   ├── SPEC_INTERVIEW.md
+│   └── tests/spec_builder_test.sh
+├── spec-builder/
+│   └── SKILL.md
 ├── ai-battle/
 │   ├── SKILL.md
 │   └── scripts/battle_runner.sh
@@ -195,6 +208,8 @@ When a spec exists (e.g. this file or a feature-specific spec), pass it with `--
 ~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
 ```
 
+If no spec is passed or found (`TICKET-SPEC.md`, `SPEC.md`, `*SPEC.md`, `*spec.md`), the runner scaffolds a DRAFT `TICKET-SPEC.md` via `lib/spec_builder.sh` and exits with code 3. The builder agent then interviews the human for the requirements (protocol: `lib/SPEC_INTERVIEW.md` — proposals may come from the ticket/request, never from the diff), writes the answers into the spec, deletes the DRAFT banner, and re-runs; a human at a terminal can run `spec_builder.sh ensure --interactive` instead. Specs with an intact DRAFT banner are refused; `--no-spec` is the explicit opt-out for battling without spec grounding.
+
 The human must approve findings before any fixes are made.
 
 ---
@@ -228,6 +243,7 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 4. **No secrets in this repo.** `.gitignore` covers `.env`, `*.key`, `*.pem`, `secrets/`, `.ssh/`, and backup directories.
 5. **Prompt size guards.** `ai-battle` refuses to pass >100KB prompts via argv to tools that cannot accept stdin or files.
 6. **Challengers run read-only.** Devin `normal`, Claude `plan`, Codex `sandbox read-only`, aider `--dry-run`, etc.
+7. **No battles against empty specs.** A missing spec is scaffolded as a DRAFT and the battle exits for the builder to fill in real requirements — before challenger selection, so the scaffold happens even with no eligible opponent installed; unfilled DRAFT scaffolds are refused, spec-less `--dry-run` included; `--no-spec` is the only opt-out and warns loudly.
 
 ---
 
@@ -249,13 +265,24 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 | Flag | Description |
 | :--- | :--- |
 | `--diff <range>` | Git diff or revision range to review |
-| `--spec <file>` | Specification file for the reviewer |
+| `--spec <file>` | Specification file for the reviewer (auto-found, else a DRAFT is scaffolded and the run exits 3) |
+| `--no-spec` | Battle without spec grounding (explicit opt-out, loud warning) |
 | `--opponent <tool>` | Force a specific challenger |
 | `--report <file>` | Where to write the raw challenger report |
 | `--timeout <s>` | Kill the challenger after this many seconds |
 | `--connect [tool]` | Show install menu for a tool |
 | `--yes` | With `--connect`, pre-confirm install |
 | `--list-tools` | List installed and missing AI CLIs |
+
+### `spec_builder.sh` (shared, `lib/`)
+
+| Command | Description |
+| :--- | :--- |
+| `find [--dir <path>]` | Print the path of an existing spec file; exit 1 if none |
+| `build [--out <file>] [--diff <range>] [--title <text>] [--force] [--interactive]` | Scaffold a DRAFT spec with auto-collected git evidence; `--interactive` interviews the human first (TTY only) |
+| `ensure [--dir] [--out] [--diff] [--title] [--interactive]` | `find`, else `build`; exit 3 means the spec found or written is still a DRAFT needing filling (a stale draft never exits 0) |
+
+Also sourceable as a library: `find_spec_file`, `spec_is_draft`, `run_spec_interview`, `build_spec_scaffold` (which consumes the `SPEC_INTENT` / `SPEC_REQUIREMENTS` / `SPEC_OUT_OF_SCOPE` / `SPEC_INVARIANTS` variables). Agents conduct the interview in conversation per `lib/SPEC_INTERVIEW.md`.
 
 ---
 
@@ -285,7 +312,7 @@ The challenger must be a different model family to catch the builder's blind spo
 - Add CI that validates every `SKILL.md` has required frontmatter.
 - Add `ai-setup.sh sync` to pull the repo and re-hotwire in one command.
 - Consider a `~/.ai/laws` repo separate from skills for users who want versioned rules.
-- Add `TICKET-SPEC.md` template for battles that target a single feature.
+- ~~Add `TICKET-SPEC.md` template for battles that target a single feature.~~ Done: `lib/spec_builder.sh`.
 
 ---
 

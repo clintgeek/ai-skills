@@ -35,3 +35,6 @@ temp/
 node_modules/
 dist/
 build/
+
+# ai-battle working artifacts (challenger reports; *.log already covers stderr)
+ai-battle-report-*.md

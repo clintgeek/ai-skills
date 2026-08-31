@@ -5,10 +5,12 @@ shopt -s nullglob
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../ai-setup/lib/ai-tools.sh"
+source "$SCRIPT_DIR/../../lib/spec_builder.sh"
 
 CALLER="${CALLING_AGENT:-}"
 OPPONENT=""
 SPEC_FILE=""
+NO_SPEC=false
 DIFF_TARGET="HEAD~1..HEAD"
 CUSTOM_ROAST=""
 DRY_RUN=false
@@ -38,7 +40,13 @@ Usage:
 Options:
   --caller <name>       Name of the initiating agent (e.g., claude, devin, agy)
   --opponent <name>     Force a specific opponent tool (e.g., devin, claude, agy)
-  --spec <file>         Path to specification or ticket file (e.g., TICKET-SPEC.md)
+  --spec <file>         Path to specification or ticket file (e.g., TICKET-SPEC.md).
+                        If omitted and none is found in the working directory, a
+                        DRAFT TICKET-SPEC.md is scaffolded (via lib/spec_builder.sh)
+                        and the battle stops (exit 3) until its requirements are
+                        filled in from the original ticket/request.
+  --no-spec             Battle without spec grounding (disables independent spec
+                        derivation; refused implicitly otherwise)
   --diff <git-rev>      Git diff revision or range (default: HEAD~1..HEAD)
   --roast <text>        Custom roast message to prefix the adversarial prompt
   --report <file>       Where to save the challenger's raw, unfiltered report
@@ -72,6 +80,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -lt 2 ]] && { echo "Error: --spec requires an argument" >&2; exit 1; }
       [[ -f "$2" ]] || { echo "Error: spec file '$2' does not exist" >&2; exit 1; }
       SPEC_FILE="$2"; shift 2 ;;
+    --no-spec) NO_SPEC=true; shift ;;
     --diff)
       [[ $# -lt 2 ]] && { echo "Error: --diff requires an argument" >&2; exit 1; }
       DIFF_TARGET="$2"; shift 2 ;;
@@ -255,6 +264,56 @@ if [[ "$LIST_TOOLS" = true ]]; then
   exit 0
 fi
 
+# Locate spec file if not given; scaffold a DRAFT one if none exists.
+# Spec discovery and scaffolding live in the shared lib/spec_builder.sh.
+# This runs BEFORE challenger discovery/selection so a missing spec is always
+# scaffolded, even when no eligible opponent is installed — spec first, then
+# matchmaking.
+if [[ "$NO_SPEC" = true ]] && [[ -n "$SPEC_FILE" ]]; then
+  echo "Error: --spec and --no-spec are mutually exclusive." >&2
+  exit 1
+fi
+if [[ "$NO_SPEC" = true ]]; then
+  echo "Warning: --no-spec set. The challenger will review without spec grounding — independent spec derivation, the cornerstone of this review, is DISABLED for this battle." >&2
+elif [[ -z "$SPEC_FILE" ]]; then
+  if ! SPEC_FILE="$(find_spec_file .)"; then
+    SPEC_FILE=""
+    if [[ "$DRY_RUN" = true ]]; then
+      # A real run would scaffold and stop before ever building a prompt, so
+      # there is no spec-less prompt to legitimately preview. Refuse (writing
+      # nothing) rather than offer an implicit no-spec path.
+      echo "Error: no spec file found. A real run would scaffold TICKET-SPEC.md and stop (exit 3); dry-run writes nothing, so previewing a spec-less prompt requires an explicit --no-spec." >&2
+      exit 3
+    else
+      SPEC_FILE="TICKET-SPEC.md"
+      build_spec_scaffold "$SPEC_FILE" "$DIFF_TARGET" "" false
+      echo "================================================================="
+      echo " 📝 No spec found — scaffolded a DRAFT one at: $SPEC_FILE"
+      echo ""
+      echo " Independent spec derivation is the cornerstone of this review,"
+      echo " so the battle will not run against an empty spec. Builder agent:"
+      echo "   1. Interview the human for the real requirements — protocol in"
+      echo "      ~/.ai/skills/lib/SPEC_INTERVIEW.md — and fill sections 1–4 of"
+      echo "      $SPEC_FILE from their answers (and the original ticket or"
+      echo "      requesting conversation), NOT from the code or the diff."
+      echo "   2. Delete the DRAFT banner block at the top of the file."
+      echo "   3. Re-run this battle (the spec is picked up automatically)."
+      echo " Human at a terminal? Run the interview yourself instead:"
+      echo "   ~/.ai/skills/lib/spec_builder.sh build --interactive --force"
+      echo " To battle without spec grounding anyway, re-run with --no-spec."
+      echo "================================================================="
+      exit 3
+    fi
+  fi
+fi
+# Refuse to battle against an unfilled scaffold — it would ground the review
+# in nothing but TODOs and builder-authored commit messages.
+if [[ -n "$SPEC_FILE" ]] && spec_is_draft "$SPEC_FILE"; then
+  echo "Error: $SPEC_FILE is still an unfilled DRAFT scaffold (its DRAFT banner is intact)." >&2
+  echo "Interview the human for the requirements (agents: ~/.ai/skills/lib/SPEC_INTERVIEW.md; terminal humans: spec_builder.sh build --interactive --force), fill sections 1–4, delete the banner block, and re-run — or pass --no-spec to battle without spec grounding." >&2
+  exit 3
+fi
+
 if [[ ${#AVAILABLE[@]} -eq 0 ]]; then
   echo "Error: No external AI CLIs found on PATH (checked: ${KNOWN_TOOLS[*]})." >&2
   exit 1
@@ -292,19 +351,6 @@ fi
 if [[ "$(family_of "$OPPONENT")" == "$CALLER_FAMILY" ]] && [[ "$ALLOW_SELF" != true ]]; then
   echo "Error: --opponent $OPPONENT is the same model family as the caller ($CALLER). Pass --allow-self if you really want a self-battle." >&2
   exit 1
-fi
-
-# Locate spec file if not given
-if [[ -z "$SPEC_FILE" ]]; then
-  for candidate in *SPEC.md *spec.md TICKET-SPEC.md SPEC.md; do
-    if [[ -f "$candidate" ]]; then
-      SPEC_FILE="$candidate"
-      break
-    fi
-  done
-fi
-if [[ -z "$SPEC_FILE" ]]; then
-  echo "Warning: no specification file given (--spec) or found in the working directory. The challenger will review without spec grounding — independent spec derivation, the cornerstone of this review, is DISABLED for this battle." >&2
 fi
 
 # Gather Git Diff — fail loudly rather than silently reviewing the wrong changeset
