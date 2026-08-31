@@ -2,11 +2,15 @@
 
 A single, shared home for every AI skill I care about. `~/.ai/skills` is the repo. `~/.ai/laws` is the shared rules directory. Every installed AI CLI is hotwired to both so they all see the same skills and the same global rules, and any new machine can be bootstrapped from this README.
 
+For the full design specification, see [`DOCS/THE_SPEC.md`](DOCS/THE_SPEC.md).
+
 ## For the AI assistant running on a new machine
 
 If you are reading this, the human wants the environment set up. Do the following, stopping for confirmation on anything that mutates the system.
 
-### 1. Ensure this repo is at `~/.ai/skills`
+### 1. Verify this repo is at `~/.ai/skills`
+
+This repo is expected to live at `~/.ai/skills`. If it was checked out somewhere else, ask the user whether to move it to `~/.ai/skills`. If they do not want to move it, use the actual checkout path in place of every `~/.ai/skills` reference in the commands below; the `ai-setup.sh` script also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
 
 If `~/.ai/skills` is not a git repo, clone it:
 
@@ -65,7 +69,7 @@ After a successful install, immediately run `hotwire <tool>`.
 devin skills list
 ```
 
-You should see `ai-battle`, `ai-setup`, and `ui-design` from this repo, plus whatever `.agents` skills are present on the system.
+You should see `ai-battle`, `ai-setup`, `spec-builder`, and `ui-design` from this repo, plus whatever `.agents` skills are present on the system.
 
 ### 6. Leave the human a report
 
@@ -107,7 +111,6 @@ List what was linked, what was already linked, what was backed up, and which too
 `ai-setup` replaces each tool's global skills and laws paths with symlinks to the shared locations:
 
 - `~/.claude/skills` -> `~/.ai/skills`
-- `~/.codeium/windsurf/skills` -> `~/.ai/skills`
 - `~/.copilot/skills` -> `~/.ai/skills`
 - `~/.config/devin/skills` -> `~/.ai/skills`
 - `~/.claude/CLAUDE.md` -> `~/.ai/laws/global_rules.md`
@@ -137,6 +140,7 @@ and `hotwire` anything that is not yet linked. Backups are timestamped, so repea
 - `ai-battle/` — adversarial cross-model code review skill.
   - `SKILL.md` — the battle prompt.
   - `scripts/battle_runner.sh` — the battle dispatcher.
+- `spec-builder/` — find or build a human-owned spec.
 - `ui-design/` — frontend/UI design skill.
 - `LICENSE` — MIT.
 - `.gitignore` — ignores `.env`, `*.key`, backups, and local noise.

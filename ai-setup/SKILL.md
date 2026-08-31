@@ -10,11 +10,13 @@ Use this skill when the user wants to:
 - Set up a new machine with all their AI tools.
 - Re-run `ai-setup` after adding a new tool or skill.
 - Install a new AI CLI and hotwire it to the shared folders.
-- Sync skills and laws across Claude, Devin, Windsurf, Copilot, etc.
+- Sync skills and laws across Claude, Devin, Copilot, etc.
 
 ## 1. Bootstrap
 
-1. If `~/.ai/skills` is missing, clone `git@github.com:clintgeek/ai-skills.git` into `~/.ai/skills`.
+1. Verify this repo is at `~/.ai/skills`.
+   This repo is expected to live at `~/.ai/skills`. If it is checked out somewhere else, ask the user whether to move it to `~/.ai/skills`. If they do not want to move it, use the actual checkout path in place of every `~/.ai/skills` reference below; `ai-setup.sh` also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
+   If `~/.ai/skills` is still missing, clone `git@github.com:clintgeek/ai-skills.git` into it.
 2. If `~/.ai/laws` is missing, create it and ensure `~/.ai/laws/global_rules.md` exists.
 3. Report the state of both directories.
 
@@ -49,7 +51,7 @@ For each installed tool:
 
 Use `~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>` for each known tool. Use `hotwire-generic <tool> <skills-path> <laws-path>` for tools not in the built-in map.
 
-Always prefer the built-in map for the 12 above. Ask the user before running `hotwire-generic`.
+Always prefer the built-in map for the 11 above. Ask the user before running `hotwire-generic`.
 
 ## 4. Install missing tools
 

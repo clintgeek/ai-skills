@@ -115,7 +115,6 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 
 ```
 ~/.claude/skills -> ~/.ai/skills
-~/.codeium/windsurf/skills -> ~/.ai/skills
 ~/.copilot/skills -> ~/.ai/skills
 ~/.config/devin/skills -> ~/.ai/skills
 ~/.claude/CLAUDE.md -> ~/.ai/laws/global_rules.md
