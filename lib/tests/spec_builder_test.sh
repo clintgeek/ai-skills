@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regression tests for lib/spec_builder.sh and its battle_runner.sh integration.
-# Run: ~/.ai/skills/lib/tests/spec_builder_test.sh   (exit 0 = all pass)
+# Run: ~/.ai/lib/tests/spec_builder_test.sh   (exit 0 = all pass)
 #
 # Covers the three findings from the 2026-08-31 ai-battle (Codex challenger):
 #   F1: a stale unfilled DRAFT must not make `ensure` exit 0

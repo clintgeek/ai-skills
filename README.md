@@ -1,6 +1,6 @@
 # ai-skills
 
-A single, shared home for every AI skill I care about. `~/.ai/skills` is the repo. `~/.ai/laws` is the shared rules directory. Every installed AI CLI is hotwired to both so they all see the same skills and the same global rules, and any new machine can be bootstrapped from this README.
+A single, shared home for every AI skill I care about. `~/.ai` is the repo. `~/.ai/laws` is the shared rules directory. Every installed AI CLI is hotwired to both so they all see the same skills and the same global rules, and any new machine can be bootstrapped from this README.
 
 For the full design specification, see [`DOCS/THE_SPEC.md`](DOCS/THE_SPEC.md).
 
@@ -8,23 +8,23 @@ For the full design specification, see [`DOCS/THE_SPEC.md`](DOCS/THE_SPEC.md).
 
 If you are reading this, the human wants the environment set up. Do the following, stopping for confirmation on anything that mutates the system.
 
-### 1. Verify this repo is at `~/.ai/skills`
+### 1. Verify this repo is at `~/.ai`
 
-This repo is expected to live at `~/.ai/skills`. If it was checked out somewhere else, ask the user whether to move it to `~/.ai/skills`. If they do not want to move it, use the actual checkout path in place of every `~/.ai/skills` reference in the commands below; the `ai-setup.sh` script also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
+This repo is expected to live at `~/.ai`. If it was checked out somewhere else, ask the user whether to move it to `~/.ai`. If they do not want to move it, use the actual checkout path in place of every `~/.ai` reference in the commands below; the `ai-setup.sh` script also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
 
-If `~/.ai/skills` is not a git repo, clone it:
+If `~/.ai` is not a git repo, clone it:
 
 ```bash
 mkdir -p ~/.ai
-if [[ ! -d ~/.ai/skills/.git ]]; then
-  git clone git@github.com:clintgeek/ai-skills.git ~/.ai/skills
+if [[ ! -d ~/.ai/.git ]]; then
+  git clone git@github.com:clintgeek/ai-skills.git ~/.ai
 fi
 ```
 
 ### 2. Run the inventory
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/ai-setup/scripts/ai-setup.sh inventory
 ```
 
 This shows which of the 11 tracked AI CLIs are installed and which are already hotwired.
@@ -34,7 +34,7 @@ This shows which of the 11 tracked AI CLIs are installed and which are already h
 For each tool that shows `installed: yes`, run:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
 ```
 
 Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
@@ -42,7 +42,7 @@ Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, 
 If a tool is installed but has no built-in path map, use `hotwire-generic` with paths the user provides, or ask before touching it:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>
+~/.ai/ai-setup/scripts/ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>
 ```
 
 `hotwire` and `hotwire-generic` make timestamped `.bak` backups before replacing any existing skill/laws directories or files.
@@ -52,13 +52,13 @@ If a tool is installed but has no built-in path map, use `hotwire-generic` with 
 For any tool the user wants that is not installed:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
+~/.ai/ai-setup/scripts/ai-setup.sh install <tool>
 ```
 
 This prints the install command and notes. Only run it without confirming if the user explicitly told you to use the `--yes` flag:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+~/.ai/ai-setup/scripts/ai-setup.sh install <tool> --yes
 ```
 
 After a successful install, immediately run `hotwire <tool>`.
@@ -73,7 +73,7 @@ You should see `ai-battle`, `ai-setup`, `spec-builder`, and `ui-design` from thi
 
 ### 6. Leave the human a report
 
-List what was linked, what was already linked, what was backed up, and which tools are still missing. Point them at `~/.ai/skills/ai-setup/SKILL.md` if they want the full skill prompt.
+List what was linked, what was already linked, what was backed up, and which tools are still missing. Point them at `~/.ai/ai-setup/SKILL.md` if they want the full skill prompt.
 
 ---
 
@@ -90,14 +90,14 @@ List what was linked, what was already linked, what was backed up, and which too
 2. Clone the repo:
 
    ```bash
-   git clone git@github.com:clintgeek/ai-skills.git ~/.ai/skills
+   git clone git@github.com:clintgeek/ai-skills.git ~/.ai
    ```
 
 3. Run the bootstrap:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/ai-setup/scripts/ai-setup.sh inventory
+   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 4. Verify:
@@ -110,21 +110,21 @@ List what was linked, what was already linked, what was backed up, and which too
 
 `ai-setup` replaces each tool's global skills and laws paths with symlinks to the shared locations:
 
-- `~/.claude/skills` -> `~/.ai/skills`
-- `~/.copilot/skills` -> `~/.ai/skills`
-- `~/.config/devin/skills` -> `~/.ai/skills`
+- `~/.claude/skills` -> `~/.ai`
+- `~/.copilot/skills` -> `~/.ai`
+- `~/.config/devin/skills` -> `~/.ai`
 - `~/.claude/CLAUDE.md` -> `~/.ai/laws/global_rules.md`
 - `~/.config/devin/global_rules.md` -> `~/.ai/laws/global_rules.md`
 - `~/.copilot/copilot-instructions.md` -> `~/.ai/laws/global_rules.md`
 
-`~/.ai/laws` is outside this repo by default. It is the single place for always-on rules that every tool reads.
+`~/.ai/laws` is part of this repo. It contains `THE_SAGE_LAWS.md` and a `global_rules.md` symlink that every tool reads.
 
 ### Re-run on an existing machine
 
 `ai-setup` is idempotent. Just run:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/ai-setup/scripts/ai-setup.sh inventory
 ```
 
 and `hotwire` anything that is not yet linked. Backups are timestamped, so repeated runs never clobber the same `.bak`.
@@ -147,7 +147,7 @@ and `hotwire` anything that is not yet linked. Backups are timestamped, so repea
 
 ## Adding a new skill
 
-1. Create a new folder under `~/.ai/skills/`.
+1. Create a new folder under `~/.ai/`.
 2. Add a `SKILL.md` with YAML frontmatter:
 
    ```markdown

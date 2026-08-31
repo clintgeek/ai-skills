@@ -7,7 +7,7 @@ description: >-
   interviewing the human — Intent, Requirements, Out of Scope, Invariants — per
   the shared lib/SPEC_INTERVIEW.md protocol. Requirements come from the human,
   ticket, or requesting conversation, never reverse-engineered from the code.
-  Backed by the shared ~/.ai/skills/lib/spec_builder.sh, which other skills
+  Backed by the shared ~/.ai/lib/spec_builder.sh, which other skills
   (e.g. ai-battle) also use. Use when the user says "write a spec", "build a
   spec", "spec this out", or before a review/battle that needs requirements.
 ---
@@ -15,8 +15,8 @@ description: >-
 # /spec-builder — Find or Build a Human-Owned Spec
 
 Thin skill wrapper around the shared spec tooling. All logic lives in
-`~/.ai/skills/lib/spec_builder.sh` (CLI + sourceable library) and
-`~/.ai/skills/lib/SPEC_INTERVIEW.md` (the interview protocol) — never
+`~/.ai/lib/spec_builder.sh` (CLI + sourceable library) and
+`~/.ai/lib/SPEC_INTERVIEW.md` (the interview protocol) — never
 duplicate it here or elsewhere.
 
 ## Flow
@@ -24,7 +24,7 @@ duplicate it here or elsewhere.
 1. **Find or scaffold:**
 
    ```bash
-   ~/.ai/skills/lib/spec_builder.sh ensure --diff <range>
+   ~/.ai/lib/spec_builder.sh ensure --diff <range>
    ```
 
    - Exit 0 with a path: a **completed** spec already exists (a stale unfilled
@@ -36,7 +36,7 @@ duplicate it here or elsewhere.
    Default `--diff` is `HEAD~1..HEAD`; pass what matches the work (e.g.
    `main...HEAD`, or `HEAD` for uncommitted changes).
 
-2. **Interview the human** following `~/.ai/skills/lib/SPEC_INTERVIEW.md`:
+2. **Interview the human** following `~/.ai/lib/SPEC_INTERVIEW.md`:
    one section at a time (Intent → Requirements → Out of Scope → Invariants),
    pushing vague answers into independently testable criteria. Propose
    candidates only from the ticket, issue, or the conversation that requested
@@ -51,7 +51,7 @@ duplicate it here or elsewhere.
 A human at a terminal can skip the agent entirely:
 
 ```bash
-~/.ai/skills/lib/spec_builder.sh ensure --interactive
+~/.ai/lib/spec_builder.sh ensure --interactive
 ```
 
 ## Notes

@@ -84,13 +84,13 @@ Run `battle_runner.sh --list-tools` to print which known tools are installed and
 
 ```bash
 # Interactive menu (in a terminal): pick by number or name, confirm, installed
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect
+~/.ai/ai-battle/scripts/battle_runner.sh --connect
 
 # Show the install command for one tool
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect goose
+~/.ai/ai-battle/scripts/battle_runner.sh --connect goose
 
 # Non-interactive install (agent-driven sessions): pre-confirms the command
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect goose --yes
+~/.ai/ai-battle/scripts/battle_runner.sh --connect goose --yes
 ```
 
 When the user says "connect", "add a challenger", or "install <tool>", the agent should: (1) run `--connect` to show the roster, (2) let the **user** pick — never auto-install unprompted, (3) run `--connect <tool> --yes` once the user has chosen. Windows PowerShell installers (devin, claude, agy) are displayed but never auto-executed from bash — the user runs those themselves.
@@ -112,9 +112,9 @@ When the user says "connect", "add a challenger", or "install <tool>", the agent
 
 ### When no spec exists: build one first
 
-Spec discovery and scaffolding live in the **shared** `~/.ai/skills/lib/spec_builder.sh` (usable by any skill, as a CLI or by sourcing its functions). If `battle_runner.sh` finds no spec, it scaffolds a DRAFT `TICKET-SPEC.md` — pre-filled with neutral git evidence (branch, commit subjects, diffstat, detected ticket IDs) and TODO requirement sections — and **exits with code 3 instead of battling**. An unfilled scaffold grounds the review in nothing, so the runner also refuses any spec whose DRAFT banner is still intact.
+Spec discovery and scaffolding live in the **shared** `~/.ai/lib/spec_builder.sh` (usable by any skill, as a CLI or by sourcing its functions). If `battle_runner.sh` finds no spec, it scaffolds a DRAFT `TICKET-SPEC.md` — pre-filled with neutral git evidence (branch, commit subjects, diffstat, detected ticket IDs) and TODO requirement sections — and **exits with code 3 instead of battling**. An unfilled scaffold grounds the review in nothing, so the runner also refuses any spec whose DRAFT banner is still intact.
 
-The builder agent's job at that point is to **interview the human, not to author the requirements itself** — full protocol in `~/.ai/skills/lib/SPEC_INTERVIEW.md`:
+The builder agent's job at that point is to **interview the human, not to author the requirements itself** — full protocol in `~/.ai/lib/SPEC_INTERVIEW.md`:
 
 1. Interrogate the user about the four sections (Intent, Requirements, Out of Scope, Invariants), one at a time, pushing vague answers into independently testable criteria. Candidate answers may be *proposed* from the original ticket/request/conversation for the human to confirm or correct — never sourced from the code or the diff. A spec reverse-engineered from the implementation can only prove the code does what the code does, which turns the battle into a rubber stamp.
 2. Write the confirmed answers into sections 1–4 and delete the DRAFT banner block at the top of the file.
@@ -123,7 +123,7 @@ The builder agent's job at that point is to **interview the human, not to author
 A human at a terminal can run the interview directly instead — `spec_builder.sh` prompts them for each section and, when Intent and Requirements are answered, writes a banner-free, battle-ready spec:
 
 ```bash
-~/.ai/skills/lib/spec_builder.sh ensure --interactive
+~/.ai/lib/spec_builder.sh ensure --interactive
 ```
 
 **Repos without tickets:** the conversation that requested the work *is* the ticket. The interview reconstructs and confirms it — quote the human's original ask back as the Intent proposal, and keep their stated requirements separate from anything the builder merely inferred while coding (inferences need explicit confirmation; see the protocol's "When there is no ticket" section). Better still, don't wait for the battle: run `spec_builder.sh ensure` when the ask first lands and interview then, while the requirements are fresh — the battle picks the file up automatically later.
@@ -133,10 +133,10 @@ If no requirements source exists at all and the human declines the interview, ru
 The same find→interview→write flow is directly invocable as the **`/spec-builder`** skill (a thin wrapper over the shared lib). Standalone usage for other skills:
 
 ```bash
-~/.ai/skills/lib/spec_builder.sh find                  # print existing spec path, rc 1 if none
-~/.ai/skills/lib/spec_builder.sh ensure                # find, else scaffold (rc 3 = new DRAFT)
-~/.ai/skills/lib/spec_builder.sh ensure --interactive  # find, else interview the human (TTY only)
-~/.ai/skills/lib/spec_builder.sh build --diff main...HEAD --title "PROJ-123"
+~/.ai/lib/spec_builder.sh find                  # print existing spec path, rc 1 if none
+~/.ai/lib/spec_builder.sh ensure                # find, else scaffold (rc 3 = new DRAFT)
+~/.ai/lib/spec_builder.sh ensure --interactive  # find, else interview the human (TTY only)
+~/.ai/lib/spec_builder.sh build --diff main...HEAD --title "PROJ-123"
 ```
 
 ---
@@ -180,22 +180,22 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 
 ```bash
 # Auto-detects caller and opponent, diffs HEAD~1 against spec
-~/.ai/skills/ai-battle/scripts/battle_runner.sh
+~/.ai/ai-battle/scripts/battle_runner.sh
 
 # Target specific spec and diff
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec TICKET-SPEC.md --diff main...HEAD
+~/.ai/ai-battle/scripts/battle_runner.sh --spec TICKET-SPEC.md --diff main...HEAD
 
 # Explicitly battle without spec grounding (weaker review, loud warning)
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --no-spec
+~/.ai/ai-battle/scripts/battle_runner.sh --no-spec
 
 # Force a specific opponent
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --opponent devin
+~/.ai/ai-battle/scripts/battle_runner.sh --opponent devin
 
 # Control where the raw report lands and how long the challenger may run
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --report battle.md --timeout 1200
+~/.ai/ai-battle/scripts/battle_runner.sh --report battle.md --timeout 1200
 
 # Dry-run to preview the prompt
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --dry-run
+~/.ai/ai-battle/scripts/battle_runner.sh --dry-run
 ```
 
 Safety behavior built into the runner:

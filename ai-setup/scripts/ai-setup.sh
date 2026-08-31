@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# ai-setup: bootstrap and hotwire AI CLI tools to ~/.ai/skills and ~/.ai/laws
+# ai-setup: bootstrap and hotwire AI CLI tools to ~/.ai and ~/.ai/laws
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/ai-tools.sh"
 
-AI_SKILLS="${AI_SKILLS:-$HOME/.ai/skills}"
+AI_SKILLS="${AI_SKILLS:-$HOME/.ai}"
 AI_LAWS="${AI_LAWS:-$HOME/.ai/laws}"
 AI_REPO="${AI_REPO:-git@github.com:clintgeek/ai-skills.git}"
 GLOBAL_RULES="$AI_LAWS/global_rules.md"
@@ -17,7 +17,7 @@ usage() {
 Usage: ai-setup.sh <command> [args]
 
 Commands:
-  clone                Clone or verify ~/.ai/skills and create ~/.ai/laws
+  clone                Clone or verify ~/.ai and create ~/.ai/laws
   inventory            Show which tools are installed and hotwired
   hotwire <tool>       Hotwire a known tool's skills + laws
   hotwire-generic <tool> <skills-path> <laws-path>

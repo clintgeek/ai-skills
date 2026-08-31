@@ -293,13 +293,13 @@ elif [[ -z "$SPEC_FILE" ]]; then
       echo " Independent spec derivation is the cornerstone of this review,"
       echo " so the battle will not run against an empty spec. Builder agent:"
       echo "   1. Interview the human for the real requirements — protocol in"
-      echo "      ~/.ai/skills/lib/SPEC_INTERVIEW.md — and fill sections 1–4 of"
+      echo "      ~/.ai/lib/SPEC_INTERVIEW.md — and fill sections 1–4 of"
       echo "      $SPEC_FILE from their answers (and the original ticket or"
       echo "      requesting conversation), NOT from the code or the diff."
       echo "   2. Delete the DRAFT banner block at the top of the file."
       echo "   3. Re-run this battle (the spec is picked up automatically)."
       echo " Human at a terminal? Run the interview yourself instead:"
-      echo "   ~/.ai/skills/lib/spec_builder.sh build --interactive --force"
+      echo "   ~/.ai/lib/spec_builder.sh build --interactive --force"
       echo " To battle without spec grounding anyway, re-run with --no-spec."
       echo "================================================================="
       exit 3
@@ -310,7 +310,7 @@ fi
 # in nothing but TODOs and builder-authored commit messages.
 if [[ -n "$SPEC_FILE" ]] && spec_is_draft "$SPEC_FILE"; then
   echo "Error: $SPEC_FILE is still an unfilled DRAFT scaffold (its DRAFT banner is intact)." >&2
-  echo "Interview the human for the requirements (agents: ~/.ai/skills/lib/SPEC_INTERVIEW.md; terminal humans: spec_builder.sh build --interactive --force), fill sections 1–4, delete the banner block, and re-run — or pass --no-spec to battle without spec grounding." >&2
+  echo "Interview the human for the requirements (agents: ~/.ai/lib/SPEC_INTERVIEW.md; terminal humans: spec_builder.sh build --interactive --force), fill sections 1–4, delete the banner block, and re-run — or pass --no-spec to battle without spec grounding." >&2
   exit 3
 fi
 

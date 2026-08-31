@@ -1,6 +1,6 @@
 ---
 name: ai-setup
-description: One-shot and re-runnable bootstrap for a new machine. Clones the shared skills repo, detects installed AI CLI tools from the ai-battle registry, hotwires their skill and laws roots to ~/.ai/skills and ~/.ai/laws, and can install missing tools.
+description: One-shot and re-runnable bootstrap for a new machine. Clones the shared skills repo, detects installed AI CLI tools from the ai-battle registry, hotwires their skill and laws roots to ~/.ai and ~/.ai/laws, and can install missing tools.
 ---
 
 # /ai-setup — Shared AI Environment Bootstrap
@@ -14,15 +14,15 @@ Use this skill when the user wants to:
 
 ## 1. Bootstrap
 
-1. Verify this repo is at `~/.ai/skills`.
-   This repo is expected to live at `~/.ai/skills`. If it is checked out somewhere else, ask the user whether to move it to `~/.ai/skills`. If they do not want to move it, use the actual checkout path in place of every `~/.ai/skills` reference below; `ai-setup.sh` also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
-   If `~/.ai/skills` is still missing, clone `git@github.com:clintgeek/ai-skills.git` into it.
+1. Verify this repo is at `~/.ai`.
+   This repo is expected to live at `~/.ai`. If it is checked out somewhere else, ask the user whether to move it to `~/.ai`. If they do not want to move it, use the actual checkout path in place of every `~/.ai` reference below; `ai-setup.sh` also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
+   If `~/.ai` is still missing, clone `git@github.com:clintgeek/ai-skills.git` into it.
 2. If `~/.ai/laws` is missing, create it and ensure `~/.ai/laws/global_rules.md` exists.
 3. Report the state of both directories.
 
 ## 2. Inventory
 
-Run `~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory` to see which of the 11 ai-battle CLI tools are installed and which are already hotwired.
+Run `~/.ai/ai-setup/scripts/ai-setup.sh inventory` to see which of the 11 ai-battle CLI tools are installed and which are already hotwired.
 
 The registry is:
 
@@ -45,11 +45,11 @@ The registry is:
 For each installed tool:
 
 1. Back up any existing skill root to `<root>.bak-<timestamp>`.
-2. Replace it with a symlink to `~/.ai/skills`.
+2. Replace it with a symlink to `~/.ai`.
 3. Back up any existing laws file/root to `<path>.bak-<timestamp>`.
 4. Replace it with a symlink to `~/.ai/laws/global_rules.md`.
 
-Use `~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>` for each known tool. Use `hotwire-generic <tool> <skills-path> <laws-path>` for tools not in the built-in map.
+Use `~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>` for each known tool. Use `hotwire-generic <tool> <skills-path> <laws-path>` for tools not in the built-in map.
 
 Always prefer the built-in map for the 11 above. Ask the user before running `hotwire-generic`.
 
@@ -58,16 +58,16 @@ Always prefer the built-in map for the 11 above. Ask the user before running `ho
 If the user wants a missing tool, get the install command from the shared registry:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
+~/.ai/ai-setup/scripts/ai-setup.sh install <tool>
 ```
 
 Add `--yes` to run the install command automatically:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+~/.ai/ai-setup/scripts/ai-setup.sh install <tool> --yes
 ```
 
-The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-tools.sh`; both `ai-setup` and `ai-battle --connect` use the same source, so nothing is duplicated. Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
+The tool binary/family/install metadata lives in `~/.ai/ai-setup/lib/ai-tools.sh`; both `ai-setup` and `ai-battle --connect` use the same source, so nothing is duplicated. Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
 
 ## 5. Re-run behavior
 
@@ -75,7 +75,7 @@ The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-t
 
 - Already-correct symlinks are skipped.
 - Broken symlinks are removed and recreated.
-- New skills added to `~/.ai/skills` are picked up by all linked tools.
+- New skills added to `~/.ai` are picked up by all linked tools.
 - Backups are timestamped, so repeated runs never overwrite the same `.bak`.
 
 ## 6. Safety rules

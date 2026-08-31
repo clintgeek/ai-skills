@@ -7,7 +7,7 @@
 
 ## 1. Purpose
 
-`ai-skills` is a single source of truth for every AI skill and global rule ("laws") I want all my AI coding assistants to share. It lives at `~/.ai/skills`, is backed by Git, and is designed so that a fresh laptop with nothing but `git` and one AI CLI (usually Devin) can be hotwired to the same skill set in minutes.
+`ai-skills` is a single source of truth for every AI skill and global rule ("laws") I want all my AI coding assistants to share. It lives at `~/.ai`, is backed by Git, and is designed so that a fresh laptop with nothing but `git` and one AI CLI (usually Devin) can be hotwired to the same skill set in minutes.
 
 The system has three goals:
 
@@ -38,7 +38,7 @@ Skills may also ship helper scripts in a `scripts/` subdirectory. The loader is 
 
 ### 2.2 Laws
 
-"Laws" are always-on rules that apply to every hotwired AI tool. They live in `~/.ai/laws/global_rules.md` (outside this repo by default, not versioned here). Each tool's global rules path is replaced with a symlink to that one file.
+"Laws" are always-on rules that apply to every hotwired AI tool. They live in `~/.ai/laws/global_rules.md`, which is a symlink to `~/.ai/laws/THE_SAGE_LAWS.md` in this repo. Each tool's global rules path is replaced with a symlink to that one file.
 
 Laws are for constraints that should survive across all tools: identity, tone, file-access rules, security policies, human-in-the-loop requirements, etc.
 
@@ -66,7 +66,7 @@ Repo-root `lib/` holds helper scripts shared across skills (as opposed to `ai-se
 
 ### 2.5 Hotwiring
 
-"Hotwiring" means replacing a tool's global skill directory and laws file with symlinks to the shared `~/.ai/skills` and `~/.ai/laws/global_rules.md`.
+"Hotwiring" means replacing a tool's global skill directory and laws file with symlinks to the shared `~/.ai` and `~/.ai/laws/global_rules.md`.
 
 Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<timestamp>`. This is non-negotiable.
 
@@ -74,15 +74,18 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 
 ## 3. Directory & File Layout
 
-### 3.1 This repo (`~/.ai/skills`)
+### 3.1 This repo (`~/.ai`)
 
 ```
-~/.ai/skills
+~/.ai
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── DOCS/
 │   └── THE_SPEC.md
+├── laws/
+│   ├── THE_SAGE_LAWS.md
+│   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
@@ -100,23 +103,45 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
     └── SKILL.md
 ```
 
-### 3.2 The user's `~/.ai` home
+### 3.2 Laws inside this repo
+
+`~/.ai` is this git repo. The `laws/` directory lives inside it:
 
 ```
 ~/.ai/
-├── skills/        # this git repo
-└── laws/
-    └── global_rules.md
+├── .gitignore
+├── LICENSE
+├── README.md
+├── DOCS/
+│   └── THE_SPEC.md
+├── laws/
+│   ├── THE_SAGE_LAWS.md
+│   └── global_rules.md -> THE_SAGE_LAWS.md
+├── lib/
+│   ├── spec_builder.sh
+│   ├── SPEC_INTERVIEW.md
+│   └── tests/spec_builder_test.sh
+├── spec-builder/
+│   └── SKILL.md
+├── ai-battle/
+│   ├── SKILL.md
+│   └── scripts/battle_runner.sh
+├── ai-setup/
+│   ├── SKILL.md
+│   ├── lib/ai-tools.sh
+│   └── scripts/ai-setup.sh
+└── ui-design/
+    └── SKILL.md
 ```
 
-`~/.ai/laws` is intentionally outside the skills repo. Rules are local, may contain personal or machine-specific instructions, and are not meant to be shared the same way skills are.
+`~/.ai/laws/global_rules.md` is a symlink to `THE_SAGE_LAWS.md` so every tool's rules path resolves to the same file. Edit `laws/THE_SAGE_LAWS.md` to change the rules.
 
 ### 3.3 Tool root symlinks after setup
 
 ```
-~/.claude/skills -> ~/.ai/skills
-~/.copilot/skills -> ~/.ai/skills
-~/.config/devin/skills -> ~/.ai/skills
+~/.claude/skills -> ~/.ai
+~/.copilot/skills -> ~/.ai
+~/.config/devin/skills -> ~/.ai
 ~/.claude/CLAUDE.md -> ~/.ai/laws/global_rules.md
 ~/.config/devin/global_rules.md -> ~/.ai/laws/global_rules.md
 ~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
@@ -139,27 +164,27 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 2. Clone the repo:
 
    ```bash
-   git clone git@github.com:clintgeek/ai-skills.git ~/.ai/skills
+   git clone git@github.com:clintgeek/ai-skills.git ~/.ai
    ```
 
 3. Run `ai-setup` inventory:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+   ~/.ai/ai-setup/scripts/ai-setup.sh inventory
    ```
 
 4. Hotwire each installed tool:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 5. Install missing tools (optional, with confirmation):
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/ai-setup/scripts/ai-setup.sh install <tool>
+   ~/.ai/ai-setup/scripts/ai-setup.sh install <tool> --yes
+   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 6. Verify:
@@ -170,10 +195,10 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 
 ### 4.2 Adding a new skill
 
-1. Create `~/.ai/skills/<skill-name>/SKILL.md` with proper frontmatter.
+1. Create `~/.ai/<skill-name>/SKILL.md` with proper frontmatter.
 2. Test that `devin skills list` shows it.
 3. `git add`, `git commit`, `git push`.
-4. On other machines, `git pull` inside `~/.ai/skills`.
+4. On other machines, `git pull` inside `~/.ai`.
 
 ### 4.3 Adding a new AI CLI to the registry
 
@@ -191,20 +216,20 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 - Correct symlinks are left alone.
 - Broken symlinks are recreated.
 - Existing real directories are timestamped-backupped before replacement.
-- New skills in `~/.ai/skills` are picked up by all linked tools on their next skill reload.
+- New skills in `~/.ai` are picked up by all linked tools on their next skill reload.
 
 ### 4.5 Running ai-battle
 
 `ai-battle` is an adversarial red-team review that uses this same tool registry to pick a challenger.
 
 ```bash
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --diff <range>
+~/.ai/ai-battle/scripts/battle_runner.sh --diff <range>
 ```
 
 When a spec exists (e.g. this file or a feature-specific spec), pass it with `--spec`:
 
 ```bash
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
+~/.ai/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
 ```
 
 If no spec is passed or found (`TICKET-SPEC.md`, `SPEC.md`, `*SPEC.md`, `*spec.md`), the runner scaffolds a DRAFT `TICKET-SPEC.md` via `lib/spec_builder.sh` and exits with code 3. The builder agent then interviews the human for the requirements (protocol: `lib/SPEC_INTERVIEW.md` — proposals may come from the ticket/request, never from the diff), writes the answers into the spec, deletes the DRAFT banner, and re-runs; a human at a terminal can run `spec_builder.sh ensure --interactive` instead. Specs with an intact DRAFT banner are refused; `--no-spec` is the explicit opt-out for battling without spec grounding.
@@ -252,7 +277,7 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 
 | Command | Description |
 | :--- | :--- |
-| `clone` | Clone `~/.ai/skills` if missing, create `~/.ai/laws` and starter `global_rules.md` |
+| `clone` | Clone `~/.ai` if missing, create `~/.ai/laws` and starter `global_rules.md` |
 | `inventory` | Show installed state, known/unknown, skill and laws link status |
 | `hotwire <tool>` | Hotwire a known tool's skills and laws roots |
 | `hotwire-generic <tool> <skills> <laws>` | Hotwire a tool with explicit paths |
@@ -287,13 +312,13 @@ Also sourceable as a library: `find_spec_file`, `spec_is_draft`, `run_spec_inter
 
 ## 8. Design Rationale
 
-### Why one `~/.ai/skills` git repo instead of per-tool plugin installs?
+### Why one `~/.ai` git repo instead of per-tool plugin installs?
 
 Skills are mostly markdown and small scripts. Keeping them in one repo means one `git pull` syncs every tool. The per-tool skill loaders only care about file paths; symlinks let the repo stay single while each tool sees its own expected layout.
 
-### Why are laws outside the repo?
+### Why are laws in the same repo?
 
-Laws are personal and often machine-specific (e.g. which directories the assistant may write). They should not be committed to a shared repo by default. The repo documents the convention (`~/.ai/laws/global_rules.md`) but does not own the content.
+The canonical `laws/THE_SAGE_LAWS.md` is versioned with the skills so a fresh clone includes the rules and `ai-setup` has a known good `global_rules.md` to link. The `global_rules.md` symlink is the stable path every tool reads; if you need machine-specific overrides, keep a separate `~/.env` or `~/.ai/laws/local_rules.md` and source it from `THE_SAGE_LAWS.md` without committing.
 
 ### Why is the tool registry in a shared bash library?
 
