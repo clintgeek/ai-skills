@@ -111,9 +111,25 @@ echo "== sudo escalation fails fast rather than hanging =="
 # Passwordless sudo (the usual VPS setup) just works. The gap was a box that
 # PROMPTS, run unattended: plain `sudo` blocks on stdin nobody can answer, and it
 # failed LATE -- after the plan was confirmed and packages were half installed.
-out="$(bs 'echo "BS_SUDO=$BS_SUDO"' < /dev/null)"
-assert "with no terminal, escalation uses sudo -n (fail fast)" \
-  $(grep -q 'BS_SUDO=sudo -n' <<<"$out" && echo 0 || echo 1)
+if [[ "$(id -u)" == "0" ]]; then
+  out="$(bs 'echo "BS_SUDO=[$BS_SUDO]"' < /dev/null)"
+  assert "as root, no escalation prefix at all" \
+    $(grep -q 'BS_SUDO=\[\]' <<<"$out" && echo 0 || echo 1)
+else
+  out="$(bs 'echo "BS_SUDO=$BS_SUDO"' < /dev/null)"
+  assert "with no terminal, escalation uses sudo -n (fail fast)" \
+    $(grep -q 'BS_SUDO=sudo -n' <<<"$out" && echo 0 || echo 1)
+  # A freshly provisioned VPS drops you in as root, often on an image with no
+  # `sudo` installed. Prefixing it there fails for no reason.
+  # NOT via bs(): that sources bootstrap.sh before running the snippet, so
+  # BS_SUDO is already computed by then. The stub has to precede the source.
+  out="$(/bin/sh -c "id() { echo 0; }; . '$BS'; echo \"BS_SUDO=[\$BS_SUDO]\"" < /dev/null 2>&1)"
+  assert "  and as root it is empty, not 'sudo'" \
+    $(grep -q 'BS_SUDO=\[\]' <<<"$out" && echo 0 || echo 1)
+fi
+# Empty must expand to NOTHING, not to an empty argv slot.
+out="$(/bin/sh -c 'BS_SUDO=""; set -- $BS_SUDO apt-get install -y zsh; echo "argc=$#"')"
+assert "  an empty prefix leaves argv unchanged" $(grep -q 'argc=4' <<<"$out" && echo 0 || echo 1)
 # Every escalation must route through BS_SUDO, or one call site can still hang.
 ! sed -e 's/[[:space:]]*#.*$//' "$BS" | grep -nE '(bs_run|bs_run_sh ")[^|]*\bsudo\b' | grep -qv 'BS_SUDO'
 assert "  and every escalation routes through it" $?

@@ -43,12 +43,23 @@ bs_die()  { echo "[bootstrap] error: $*" >&2; return 1; }
 
 bs_have() { command -v "$1" >/dev/null 2>&1; }
 
-# How to escalate. With a terminal, plain `sudo` may prompt and that is fine.
-# With NO terminal -- cron, cloud-init, a provisioning script -- a prompt is
-# unanswerable, so use `-n` to fail fast instead of blocking on stdin forever.
-# Word-split on purpose at the call sites.
+# How to escalate.
+#
+#   already root  -> EMPTY. No escalation is needed, and a freshly provisioned
+#                    VPS often drops you in as root on an image with no `sudo`
+#                    installed at all, where prefixing it fails for no reason.
+#   no terminal   -> `sudo -n`. cron, cloud-init and provisioning scripts cannot
+#                    answer a password prompt, so fail fast rather than block on
+#                    stdin forever.
+#   otherwise     -> plain `sudo`, which may prompt, which is fine.
+#
+# Unquoted at the call sites on purpose: empty must expand to nothing.
 BS_SUDO="sudo"
-[ -t 0 ] || BS_SUDO="sudo -n"
+if [ "$(id -u)" = "0" ]; then
+  BS_SUDO=""
+elif [ ! -t 0 ]; then
+  BS_SUDO="sudo -n"
+fi
 
 # Can we escalate right now without a password? Passwordless sudo (the usual VPS
 # setup) says yes; a Mac asking for a password says no.
