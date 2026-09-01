@@ -210,8 +210,13 @@ assert "the exact line present is recognized and skipped" \
   $(grep -q 'already in' <<<"$out" && echo 0 || echo 1)
 check "  and it is not appended twice" 1 "$(grep -cxF "$LINE" "$ZP/.zprofile")"
 
-# A line for a DIFFERENT prefix must not count as ours.
-printf 'eval "$(/usr/local/bin/brew shellenv)"\n' > "$ZP/.zprofile"
+# A line for a DIFFERENT prefix must not count as ours. Derive "different" from
+# the ACTUAL prefix: hardcoding /usr/local is only different on Apple Silicon,
+# and on Linux it IS the prefix, so the line correctly read as already-present
+# and this assertion failed for the right reason on the wrong premise.
+OTHER_PFX="/opt/homebrew"
+[ "$PFX" = "/opt/homebrew" ] && OTHER_PFX="/usr/local"
+printf 'eval "$(%s/bin/brew shellenv)"\n' "$OTHER_PFX" > "$ZP/.zprofile"
 out="$(HOME="$ZP" bs 'bs_brew_persist')"
 assert "a different brew prefix does not count as already-present" \
   $(grep -q 'added brew shellenv' <<<"$out" && echo 0 || echo 1)
