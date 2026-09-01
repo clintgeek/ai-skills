@@ -30,12 +30,48 @@ _fs_log() {
   esac
 }
 
+# Absolute, normalized target of the symlink $1.
+#
+# `readlink` returns the target VERBATIM, which may be relative -- a link made
+# by hand as `ln -s ../../.ai/skills` reads back as "../../.ai/skills". Comparing
+# that against an absolute root never matches, so a link that IS ours was
+# treated as a stranger's and backed up on every single re-run.
+#
+# No `readlink -f`: that is a GNU extension and macOS does not have it. No
+# `realpath` either, for the same reason. Resolved with `cd` in a subshell, which
+# is POSIX and also normalizes away `..` and `.`.
+#
+# Only called on a link that resolves -- backup_path removes dangling links
+# before this point -- so the cd is safe.
+_fs_abs_link_target() {
+  _fs_t="$(readlink "$1" 2>/dev/null)" || return 1
+  [ -n "$_fs_t" ] || return 1
+  case "$_fs_t" in
+    /*) ;;                                    # already absolute
+    *)  _fs_t="$(dirname "$1")/$_fs_t" ;;     # relative to the LINK's directory
+  esac
+  if [ -d "$_fs_t" ]; then
+    (cd "$_fs_t" 2>/dev/null && pwd) || return 1
+  else
+    # A file: normalize the directory and keep the basename.
+    _fs_dir="$(dirname "$_fs_t")"
+    _fs_base="$(basename "$_fs_t")"
+    _fs_dir="$(cd "$_fs_dir" 2>/dev/null && pwd)" || return 1
+    echo "$_fs_dir/$_fs_base"
+  fi
+}
+
 # Is this a symlink pointing inside the given root? Those are ours, from an
 # earlier run, and carry no data worth preserving.
 _fs_link_points_into() {
-  _fs_target="$(readlink "$1" 2>/dev/null)" || return 1
+  _fs_target="$(_fs_abs_link_target "$1")" || return 1
+  # Normalize the root as well, so a symlinked home (/Users/x -> /home/x) or a
+  # trailing slash cannot make an identical path compare unequal.
+  _fs_root="$(cd "$2" 2>/dev/null && pwd)" || _fs_root="${2%/}"
   case "$_fs_target" in
-    "$2"|"$2"/*) return 0 ;;
+    # Exact match, or a path BELOW the root. Not a string prefix: that would
+    # make /Users/x/.ai-backup look like it lives under /Users/x/.ai.
+    "$_fs_root"|"$_fs_root"/*) return 0 ;;
     *) return 1 ;;
   esac
 }

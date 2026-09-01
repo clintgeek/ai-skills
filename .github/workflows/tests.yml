@@ -69,6 +69,9 @@ jobs:
           echo "definitions found: $n"
           [ "$n" -eq 2 ] || { echo "FAIL: expected one backup_path and one ensure_dir" >&2; exit 1; }
 
+      - name: fs-helpers suite
+        run: ./lib/tests/fs_helpers_test.sh
+
       - name: report-check suite
         run: ./lib/tests/report_check_test.sh
 
