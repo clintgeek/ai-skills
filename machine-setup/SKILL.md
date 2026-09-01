@@ -76,6 +76,6 @@ Set up repos only:
 
 ## 5. Customizing the catalog
 
-- Add new apps in `lib/app-catalog.sh`.
+- Add new apps in `lib/app-catalog.zsh`.
 - Add or change personal repos in `machine-setup/repos.conf`.
 - Both files are committed, so the same catalog travels to new machines.

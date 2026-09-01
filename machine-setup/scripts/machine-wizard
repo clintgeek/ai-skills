@@ -22,4 +22,5 @@ if ! command -v zsh >/dev/null 2>&1; then
   fi
 fi
 
-exec zsh "$0.zsh" "$@"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec zsh "$SCRIPT_DIR/machine-wizard.zsh" "$@"

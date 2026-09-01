@@ -71,11 +71,11 @@ run_interview() {
   if [[ -t 0 && "$REPOS_ONLY" != true && "$YES" != true ]]; then
     if [[ -z "$ROLE" ]]; then
       printf "%s" "Primary role? (dev/admin/general) "
-      read -r ROLE
+      read -r ROLE || true
     fi
     if [[ -z "$CATEGORIES" ]]; then
       printf "%s" "Categories? (comma-separated: cli,terminal,browser,productivity,security,media,dev-tools,cloud,communication) "
-      read -r CATEGORIES
+      read -r CATEGORIES || true
     fi
   fi
   if [[ "$REPOS_ONLY" == true ]]; then
@@ -101,7 +101,7 @@ edit_checklist() {
   show_checklist
   printf "%s" "Numbers to remove (comma-separated), or Enter to keep all: "
   local remove_s
-  read -r remove_s
+  read -r remove_s || true
   [[ -z "$remove_s" ]] && return 0
   local to_remove=( ${(s:,:)remove_s} )
   local -a new=()
@@ -134,7 +134,7 @@ confirm_run() {
   fi
   local a
   printf "%s" "Run this plan? [y/N] "
-  read -r a
+  read -r a || true
   [[ "$a" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 }
 
@@ -224,6 +224,10 @@ report() {
 
 main() {
   parse_args "$@"
+  if [[ "$AI" == true && "$REPOS_ONLY" == true ]]; then
+    log "--ai is ignored with --repos-only"
+    AI=false
+  fi
   if [[ "$DRY_RUN" == true && "$REPOS_ONLY" != true && ( -z "$ROLE" || -z "$CATEGORIES" ) ]]; then
     ROLE="${ROLE:-general}"
     CATEGORIES="${CATEGORIES:-cli}"

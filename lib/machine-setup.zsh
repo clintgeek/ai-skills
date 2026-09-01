@@ -5,7 +5,7 @@
 
 [[ -n "${REPO_ROOT:-}" ]] || { echo "REPO_ROOT must be set before sourcing lib/machine-setup.zsh" >&2; return 1; }
 
-source "$REPO_ROOT/lib/app-catalog.sh"
+source "$REPO_ROOT/lib/app-catalog.zsh"
 source "$REPO_ROOT/machine-setup/repos.conf"
 source "$REPO_ROOT/ai-setup/lib/ai-tools.sh"
 source "$REPO_ROOT/lib/setup-helpers.zsh"
@@ -124,18 +124,24 @@ setup_repos() {
       continue
     fi
     was_cloned=false
+    local bak=""
     if [[ -d "$path/.git" ]]; then
       log "pulling ${REPO_NAME[$id]:-$id}..."
       git -C "$path" pull --ff-only || log "  pull failed, continuing"
     else
       if [[ -e "$path" || -L "$path" ]]; then
-        backup_path "$path" || { log "  backup of $path failed, skipping"; continue; }
+        bak="$(backup_path "$path" 2>/dev/null)" || { log "  backup of $path failed, skipping"; continue; }
       fi
       log "cloning ${REPO_NAME[$id]:-$id} to $path..."
       if git clone "$url" "$path"; then
         was_cloned=true
       else
         log "  clone of ${REPO_NAME[$id]:-$id} failed"
+        if [[ -n "$bak" ]]; then
+          log "  restoring $path from $bak"
+          rm -rf "$path"
+          mv "$bak" "$path"
+        fi
         continue
       fi
     fi

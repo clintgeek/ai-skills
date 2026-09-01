@@ -5,9 +5,9 @@
 
 _log_helper() {
   if (( $+functions[log] )); then
-    log "$@"
+    log "$@" >&2
   else
-    echo "$@"
+    echo "$@" >&2
   fi
 }
 
@@ -17,6 +17,9 @@ backup_path() {
     local bak="${path}.bak-${BACKUP_TIMESTAMP}"
     _log_helper "  backing up $path -> $bak"
     mv "$path" "$bak"
+    echo "$bak"
+  else
+    echo ""
   fi
 }
 
