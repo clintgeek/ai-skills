@@ -62,9 +62,9 @@ The runner's `discover_tools` function scans PATH (`command -v`) against a regis
 
 | Binary | Tool | Family | Read-only invocation |
 | :--- | :--- | :--- | :--- |
-| `devin` | Cognition Devin CLI | cognition | `--permission-mode normal --prompt-file <f>` |
+| `devin` | Cognition Devin CLI | cognition | `-p --permission-mode auto --prompt-file <f>` |
 | `claude` | Anthropic Claude Code | anthropic | `-p --permission-mode plan` (stdin) |
-| `agy` | Google Antigravity CLI | google | `-p -` (stdin) |
+| `agy` | Google Antigravity CLI | google | `-p "<prompt>"` (argv; `-p -` does NOT read stdin) |
 | `copilot` | GitHub Copilot CLI | github | `-p "<prompt>"` (no prompt-file support yet) |
 | `codex` | OpenAI Codex CLI | openai | `exec --sandbox read-only -` (stdin) |
 | `opencode` | opencode (model-agnostic) | opencode | `run "<prompt>"` |
@@ -201,8 +201,8 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 Safety behavior built into the runner:
 * **No silent self-battle.** If the only CLI on PATH matches the caller (or `--opponent` names the caller), the runner refuses and exits; `--allow-self` is the explicit escape hatch.
 * **Loud diff failures.** If `git diff <target>` fails, the runner errors out instead of silently falling back to a different changeset.
-* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode normal` (its documented modes are normal/accept-edits/bypass/autonomous — `normal` gates mutations behind approvals a headless run can't grant), Claude with `--permission-mode plan`, codex with `--sandbox read-only`, aider with `--dry-run`. Never loosen these — the diff is untrusted input.
-* **Argv size guard.** Tools with no stdin/file input (copilot, opencode, cursor-agent) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
+* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode auto` (its modes are auto/accept-edits/smart/dangerous; `auto` auto-approves read-only tools only, so edits stay gated — and there is no `normal`, which is why the earlier value denied even reads), Claude with `--permission-mode plan`, codex with `--sandbox read-only`, aider with `--dry-run`. Never loosen these — the diff is untrusted input.
+* **Argv size guard.** Tools with no stdin/file input (copilot, opencode, cursor-agent, agy) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
 * **Timeout.** The challenger is killed after `--timeout` seconds (default 900).
 * **Verbatim report.** The challenger's stdout is tee'd to the `--report` file for the human, unfiltered by the builder; stderr diagnostics (auth failures, rate limits) are kept in a companion `.stderr.log`.
 * **Spec required for full rigor.** A missing spec scaffolds a DRAFT `TICKET-SPEC.md` (shared `lib/spec_builder.sh`) and exits with code 3 so the builder can fill in real requirements; a spec whose DRAFT banner is still intact is refused the same way. This happens before challenger selection, so the spec gets scaffolded even when no eligible opponent is installed. Spec-less `--dry-run` also refuses (exit 3, writes nothing) — there is no spec-less prompt a real run would ever execute. `--no-spec` is the explicit opt-out for all of it, and it warns loudly that independent spec derivation is disabled.
@@ -213,7 +213,7 @@ The challenger is a **reviewer, not an editor** — always invoke it read-only, 
 
 * **Attacking via Devin:**
   ```bash
-  timeout 900 devin --permission-mode normal --prompt-file "$PROMPT_FILE" | tee "$REPORT_FILE"
+  timeout 900 devin -p --permission-mode auto --prompt-file "$PROMPT_FILE" | tee "$REPORT_FILE"
   ```
 * **Attacking via Claude:**
   ```bash
@@ -221,7 +221,7 @@ The challenger is a **reviewer, not an editor** — always invoke it read-only, 
   ```
 * **Attacking via AGY:**
   ```bash
-  timeout 900 agy -p - < "$PROMPT_FILE" | tee "$REPORT_FILE"
+  timeout 900 agy -p "$(cat "$PROMPT_FILE")" | tee "$REPORT_FILE"
   ```
 
 ---

@@ -444,7 +444,7 @@ echo " Opponent Tool: $OPPONENT"
 echo " Spec File:     ${SPEC_FILE:-"(None detected — using workspace)"}"
 echo " Diff Target:   $DIFF_TARGET"
 echo " Raw Report:    $REPORT_FILE"
-echo " Timeout:       ${TIMEOUT_SECS}s"
+echo " Timeout:       ${TIMEOUT_SECS}s (${TIMEOUT_CMD:-portable watchdog})"
 echo "================================================================="
 
 if [[ "$DRY_RUN" = true ]]; then
@@ -464,8 +464,73 @@ fi
 DISPATCH_STATUS=0
 ERR_FILE="$REPORT_FILE.stderr.log"
 
+# macOS ships NO `timeout` -- it is GNU coreutils, and Apple does not include it.
+# Every dispatch here used to die with "timeout: command not found" before the
+# challenger ran at all, which is how a battle could produce a 0-byte report.
+# Prefer the real thing, then Homebrew's gtimeout, then a portable watchdog.
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+# Portable stand-in for `timeout <secs> <cmd...>`. Returns 124 when it had to
+# kill the child, matching GNU timeout so the caller's status handling is
+# identical either way. A marker file distinguishes "we killed it" from the
+# child being SIGTERMed by something else, which a bare 143 cannot.
+_watchdog_run() {
+  local secs="$1"; shift
+  local marker
+  marker="$(mktemp "${TMPDIR:-/tmp}/ai_battle_timeout.XXXXXX")"
+  rm -f "$marker"
+
+  "$@" &
+  local child=$!
+
+  (
+    local waited=0
+    while [[ "$waited" -lt "$secs" ]]; do
+      sleep 1
+      kill -0 "$child" 2>/dev/null || exit 0
+      waited=$((waited + 1))
+    done
+    : > "$marker"
+    kill -TERM "$child" 2>/dev/null
+    # Give it a moment to exit cleanly, then insist.
+    local grace=0
+    while [[ "$grace" -lt 5 ]]; do
+      sleep 1
+      kill -0 "$child" 2>/dev/null || exit 0
+      grace=$((grace + 1))
+    done
+    kill -KILL "$child" 2>/dev/null
+  ) &
+  local watcher=$!
+
+  local rc=0
+  wait "$child" || rc=$?
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || true
+
+  if [[ -f "$marker" ]]; then
+    rm -f "$marker"
+    return 124
+  fi
+  rm -f "$marker"
+  return "$rc"
+}
+
+run_with_timeout() {
+  if [[ -n "$TIMEOUT_CMD" ]]; then
+    "$TIMEOUT_CMD" "$TIMEOUT_SECS" "$@"
+  else
+    _watchdog_run "$TIMEOUT_SECS" "$@"
+  fi
+}
+
 dispatch() {
-  timeout "$TIMEOUT_SECS" "$@" 2> >(tee "$ERR_FILE" >&2) | tee "$REPORT_FILE" || DISPATCH_STATUS=$?
+  run_with_timeout "$@" 2> >(tee "$ERR_FILE" >&2) | tee "$REPORT_FILE" || DISPATCH_STATUS=$?
 }
 
 # For tools that only accept the prompt via argv: refuse oversized prompts
@@ -475,23 +540,35 @@ require_argv_prompt() {
   local size
   size="$(wc -c < "$PROMPT_FILE")"
   if (( size > 100000 )); then
-    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec or pick an opponent with stdin/file input." >&2
+    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec, or pick an opponent that takes a file/stdin (devin, codex, goose, qwen, amp)." >&2
     exit 1
   fi
 }
 
 case "$OPPONENT" in
   devin)
-    # Documented permission modes: normal | accept-edits | bypass | autonomous.
-    # 'normal' requires approval for mutations, which a headless run can't
-    # grant — effectively read-only.
-    dispatch devin --permission-mode normal --prompt-file "$PROMPT_FILE"
+    # -p/--print is REQUIRED for non-interactive use. Without it, --prompt-file
+    # still starts an INTERACTIVE session, which in a headless run dies with
+    # "Scrollback error: io error" before the model is ever consulted — a battle
+    # that looks dispatched and yields an empty report.
+    # Devin's ACTUAL documented modes are: auto | accept-edits | smart |
+    # dangerous. There is no "normal" — that invalid value denied every tool
+    # call including READS, so the challenger could not inspect anything and
+    # bailed after one sentence. 'auto' auto-approves read-only tools ONLY;
+    # workspace edits need 'accept-edits' and are therefore still refused here.
+    # Never raise this to accept-edits/smart/dangerous: the diff is untrusted.
+    dispatch devin -p --permission-mode auto --prompt-file "$PROMPT_FILE"
     ;;
   claude)
     dispatch claude -p --permission-mode plan < "$PROMPT_FILE"
     ;;
   agy)
-    dispatch agy -p - < "$PROMPT_FILE"
+    # `agy -p -` does NOT read stdin: the "-" is taken as the literal prompt
+    # text, so the model replies "How can I help you today?" and never sees the
+    # diff. `agy -p` with no argument just prints help. The prompt must arrive
+    # as an argv argument, which puts agy behind the size guard.
+    require_argv_prompt
+    dispatch agy -p "$(cat "$PROMPT_FILE")"
     ;;
   qwen)
     dispatch qwen < "$PROMPT_FILE"
