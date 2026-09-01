@@ -184,7 +184,7 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
 ```
 
-Tools with unverified path maps (`codex`, `opencode`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`. `agy` is vetted (`TOOL_KNOWN[agy]=1`) and hotwires normally; this list and the registry must agree.
+Tools with unverified path maps (`codex`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`. `agy` is vetted (`TOOL_KNOWN[agy]=1`) and hotwires normally; this list and the registry must agree.
 
 ---
 
@@ -285,7 +285,7 @@ The human must approve findings before any fixes are made.
 | `agy` | google | `~/.antigravity/skills` | `~/.antigravity/global_rules.md` | yes |
 
 | `codex` | openai | `~/.codex/skills` | `~/.codex/global_rules.md` | no |
-| `opencode` | opencode | `~/.opencode/skills` | `~/.opencode/global_rules.md` | no |
+| `opencode` | opencode | `~/.opencode/skills` | `~/.opencode/global_rules.md` | yes |
 
 A "no" in `Known` means the path has not been verified on a real install. Use `hotwire-generic` or promote it after confirming the layout.
 

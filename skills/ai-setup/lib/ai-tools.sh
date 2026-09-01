@@ -80,7 +80,13 @@ TOOL_INSTALL_NOTE[codex]="Alternative: brew install codex"
 TOOL_INSTALL_NOTE[claude]="Alternative: npm install -g @anthropic-ai/claude-code"
 TOOL_INSTALL_NOTE[opencode]="Alternative: npm install -g opencode-ai"
 
-# Best-guess global skill and laws paths. Known entries are vetted; others are stubs.
+# Global skill and laws paths.
+#
+# TOOL_KNOWN=1 means the path is VETTED -- someone confirmed the tool actually
+# reads it, not merely that a symlink there resolves. opencode was promoted on
+# 2026-09-01 after it enumerated all five skills by name from ~/.opencode/skills.
+# TOOL_KNOWN=0 means the path is a plausible guess; `hotwire` refuses it and
+# `hotwire-generic <tool> <skills> <laws>` is the route until someone verifies.
 declare -A TOOL_SKILLS
 TOOL_SKILLS[devin]="$HOME/.config/devin/skills"
 TOOL_SKILLS[claude]="$HOME/.claude/skills"
@@ -103,7 +109,7 @@ TOOL_KNOWN[claude]=1
 TOOL_KNOWN[copilot]=1
 TOOL_KNOWN[agy]=1
 TOOL_KNOWN[codex]=0
-TOOL_KNOWN[opencode]=0
+TOOL_KNOWN[opencode]=1
 
 # Tool metadata helpers (same names as the originals in ai-battle for easy sourcing).
 
