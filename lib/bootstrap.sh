@@ -126,6 +126,14 @@ bs_pkg_install() {
 # everything downstream -- installing zsh, installing a modern bash, and any app
 # an agent later decides to install. Without it a fresh Mac can do none of that.
 
+# This is `curl | bash`, deliberately and with the owner's sign-off (2026-09-01).
+# It is Homebrew's only sanctioned install path -- there is no signed package --
+# and it is exactly what a human would paste into the same terminal, with the
+# same assumptions. Pinning a commit instead of HEAD would mean running an
+# installer upstream no longer tests. The same trust model already applies to
+# every AI CLI in the registry and to oh-my-zsh, so singling brew out would be
+# inconsistent rather than safer. Raised by an ai-battle challenger and declined
+# on the merits; do not "harden" this into a checksum prompt nobody reads.
 BS_BREW_INSTALLER='/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 
 # Homebrew lives at /opt/homebrew on Apple Silicon and /usr/local on Intel.
