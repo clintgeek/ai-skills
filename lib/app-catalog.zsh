@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # Shared app catalog for machine-setup.
-# Sourced by machine-setup/scripts/machine-wizard.zsh.
+# Sourced by skills/machine-setup/scripts/machine-wizard.zsh.
 #
 # Add an app by adding its id to APPS and filling the associative arrays below.
 # Leave an OS command/package empty if the app is not available there.

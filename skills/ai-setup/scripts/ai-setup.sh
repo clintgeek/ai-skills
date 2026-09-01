@@ -5,8 +5,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/ai-tools.sh"
 
-AI_SKILLS="${AI_SKILLS:-$HOME/.ai}"
-AI_LAWS="${AI_LAWS:-$HOME/.ai/laws}"
+# AI_ROOT is the repo checkout; skills live in its skills/ subdirectory and laws
+# in laws/. Tools are linked at those subdirectories, never at the repo root --
+# a tool's skills root must contain <skill>/SKILL.md directly.
+AI_ROOT="${AI_ROOT:-$HOME/.ai}"
+AI_SKILLS="${AI_SKILLS:-$AI_ROOT/skills}"
+AI_LAWS="${AI_LAWS:-$AI_ROOT/laws}"
 AI_REPO="${AI_REPO:-git@github.com:clintgeek/ai-skills.git}"
 GLOBAL_RULES="$AI_LAWS/global_rules.md"
 
@@ -26,7 +30,7 @@ Commands:
                        Show install command for a tool; --yes runs it
 
 Environment:
-  AI_SKILLS, AI_LAWS, AI_REPO can override defaults.
+  AI_ROOT, AI_SKILLS, AI_LAWS, AI_REPO can override defaults.
 EOF
 }
 
@@ -85,12 +89,12 @@ EOF
 
 cmd_clone() {
   log "clone"
-  if [[ ! -d "$AI_SKILLS/.git" ]]; then
-    ensure_dir "$(dirname "$AI_SKILLS")"
-    log "  cloning $AI_REPO into $AI_SKILLS"
-    git clone "$AI_REPO" "$AI_SKILLS"
+  if [[ ! -d "$AI_ROOT/.git" ]]; then
+    ensure_dir "$(dirname "$AI_ROOT")"
+    log "  cloning $AI_REPO into $AI_ROOT"
+    git clone "$AI_REPO" "$AI_ROOT"
   else
-    log "  $AI_SKILLS already a git repo"
+    log "  $AI_ROOT already a git repo"
   fi
   ensure_dir "$AI_LAWS"
   if [[ ! -f "$GLOBAL_RULES" ]]; then
@@ -112,8 +116,8 @@ cmd_inventory() {
   local t
   for t in "${AI_TOOLS[@]}"; do
     local installed="no" skills="no" laws="no" known="no"
-    local skills_root="${TOOL_SKILLS[$t]}"
-    local laws_root="${TOOL_LAWS[$t]}"
+    local skills_root="${TOOL_SKILLS[$t]:-}"
+    local laws_root="${TOOL_LAWS[$t]:-}"
     if command -v "$t" >/dev/null 2>&1; then
       installed="yes"
     fi
@@ -134,9 +138,12 @@ cmd_inventory() {
 
 cmd_hotwire() {
   local t="$1"
-  local skills_root="${TOOL_SKILLS[$t]}"
-  local laws_root="${TOOL_LAWS[$t]}"
   log "hotwire $t"
+  # Index the registry only through :- defaults: under `set -u` a bare
+  # ${TOOL_SKILLS[$t]} on an unknown tool aborts with "unbound variable"
+  # before the friendly message below can ever be printed.
+  local skills_root="${TOOL_SKILLS[$t]:-}"
+  local laws_root="${TOOL_LAWS[$t]:-}"
   if [[ -z "$skills_root" || "${TOOL_KNOWN[$t]:-0}" -ne 1 ]]; then
     log "  $t has no built-in path map. Use: ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>"
     exit 1

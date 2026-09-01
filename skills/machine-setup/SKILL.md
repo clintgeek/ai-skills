@@ -17,11 +17,11 @@ Use this skill when the user wants to set up a new computer and get suggestions 
 
 ## 2. What it does
 
-The wizard at `machine-setup/scripts/machine-wizard`:
+The wizard at `skills/machine-setup/scripts/machine-wizard`:
 
-1. **Personal repos first** — clones or pulls the repos listed in `machine-setup/repos.conf` (e.g. `~/.ai`, `~/dotfiles`). Runs any configured post-clone script (e.g. `dotfiles/install.sh`) after a fresh clone.
+1. **Personal repos first** — clones or pulls the repos listed in `skills/machine-setup/repos.conf` (e.g. `~/.ai`, `~/dotfiles`). Runs any configured post-clone script (e.g. `dotfiles/install.sh`) after a fresh clone.
 2. **Interview** — asks the user what the machine is for and which categories of apps they want.
-3. **Recommends** — pre-selects a default checklist from `lib/app-catalog.sh` based on role + categories.
+3. **Recommends** — pre-selects a default checklist from `lib/app-catalog.zsh` based on role + categories.
 4. **Lets the user edit** — they can remove, add, or confirm the list.
 5. **Installs** — runs the OS-appropriate install command for each selected app.
 6. **Reports** — prints what was installed, skipped, or failed.
@@ -31,13 +31,13 @@ The wizard at `machine-setup/scripts/machine-wizard`:
 Interactive mode (best in a terminal):
 
 ```bash
-~/.ai/machine-setup/scripts/machine-wizard
+~/.ai/skills/machine-setup/scripts/machine-wizard
 ```
 
 Non-interactive / repeatable mode:
 
 ```bash
-~/.ai/machine-setup/scripts/machine-wizard \
+~/.ai/skills/machine-setup/scripts/machine-wizard \
   --role dev \
   --categories terminal,productivity,security \
   --extras zoom,notion \
@@ -47,7 +47,7 @@ Non-interactive / repeatable mode:
 For a headless VPS (CLI-only) and also hotwire already-installed AI CLIs:
 
 ```bash
-~/.ai/machine-setup/scripts/machine-wizard \
+~/.ai/skills/machine-setup/scripts/machine-wizard \
   --role admin \
   --categories cli \
   --ai \
@@ -57,13 +57,13 @@ For a headless VPS (CLI-only) and also hotwire already-installed AI CLIs:
 Preview only:
 
 ```bash
-~/.ai/machine-setup/scripts/machine-wizard --dry-run
+~/.ai/skills/machine-setup/scripts/machine-wizard --dry-run
 ```
 
 Set up repos only:
 
 ```bash
-~/.ai/machine-setup/scripts/machine-wizard --repos-only --yes
+~/.ai/skills/machine-setup/scripts/machine-wizard --repos-only --yes
 ```
 
 ## 4. Constraints
@@ -77,5 +77,5 @@ Set up repos only:
 ## 5. Customizing the catalog
 
 - Add new apps in `lib/app-catalog.zsh`.
-- Add or change personal repos in `machine-setup/repos.conf`.
+- Add or change personal repos in `skills/machine-setup/repos.conf`.
 - Both files are committed, so the same catalog travels to new machines.

@@ -5,7 +5,7 @@ shopt -s nullglob
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../ai-setup/lib/ai-tools.sh"
-source "$SCRIPT_DIR/../../lib/spec_builder.sh"
+source "$SCRIPT_DIR/../../../lib/spec_builder.sh"
 
 CALLER="${CALLING_AGENT:-}"
 OPPONENT=""

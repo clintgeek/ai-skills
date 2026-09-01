@@ -1,13 +1,13 @@
 #!/usr/bin/env zsh
 # Shared helpers for machine-setup.
-# Sourced by machine-setup/scripts/machine-wizard.zsh.
+# Sourced by skills/machine-setup/scripts/machine-wizard.zsh.
 # The caller must set REPO_ROOT before sourcing.
 
 [[ -n "${REPO_ROOT:-}" ]] || { echo "REPO_ROOT must be set before sourcing lib/machine-setup.zsh" >&2; return 1; }
 
 source "$REPO_ROOT/lib/app-catalog.zsh"
-source "$REPO_ROOT/machine-setup/repos.conf"
-source "$REPO_ROOT/ai-setup/lib/ai-tools.sh"
+source "$REPO_ROOT/skills/machine-setup/repos.conf"
+source "$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh"
 source "$REPO_ROOT/lib/setup-helpers.zsh"
 
 log() {
@@ -161,9 +161,9 @@ setup_ai_clis() {
   for tool in "${AI_TOOLS[@]}"; do
     if [[ "${TOOL_KNOWN[$tool]:-0}" -eq 1 ]]; then
       log "installing $tool if missing..."
-      "$REPO_ROOT/ai-setup/scripts/ai-setup.sh" install "$tool" --yes || log "  install of $tool failed"
+      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup.sh" install "$tool" --yes || log "  install of $tool failed"
       log "hotwiring $tool..."
-      "$REPO_ROOT/ai-setup/scripts/ai-setup.sh" hotwire "$tool" || log "  hotwire of $tool failed"
+      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup.sh" hotwire "$tool" || log "  hotwire of $tool failed"
     fi
   done
 }

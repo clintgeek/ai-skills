@@ -44,7 +44,7 @@ Laws are for constraints that should survive across all tools: identity, tone, f
 
 ### 2.3 Tool Registry
 
-`ai-setup/lib/ai-tools.sh` is the canonical registry of the 11 AI CLIs the system knows about. It stores:
+`skills/ai-setup/lib/ai-tools.sh` is the canonical registry of the 11 AI CLIs the system knows about. It stores:
 
 - Binary name
 - Display name
@@ -59,7 +59,7 @@ Both `ai-setup` and `ai-battle` source this file. It is the only place these val
 
 ### 2.4 Shared tools (`lib/`)
 
-Repo-root `lib/` holds helper scripts shared across skills (as opposed to `ai-setup/lib/ai-tools.sh`, which predates it and stays put for compatibility). Each is written to work both as a CLI and as a sourceable bash library. Current entries:
+Repo-root `lib/` holds helper scripts shared across skills (as opposed to `skills/ai-setup/lib/ai-tools.sh`, which predates it and stays put for compatibility). Each is written to work both as a CLI and as a sourceable bash library. Current entries:
 
 - `lib/spec_builder.sh` — spec discovery (`find`), scaffolding (`build`), and find-or-scaffold (`ensure`). Scaffolds a DRAFT `TICKET-SPEC.md` pre-filled with neutral git evidence (branch, commits, diffstat, ticket IDs) and TODO requirement sections that must be filled from the original ticket/request — never reverse-engineered from the code. `--interactive` interviews the human at the terminal for the four sections and writes a banner-free spec when Intent and Requirements are answered. Consumers: `ai-battle`, and the `spec-builder` skill — a thin wrapper that makes the find→interview→write flow directly invocable as `/spec-builder` (any skill needing a spec should source the lib rather than copying the logic).
 - `lib/SPEC_INTERVIEW.md` — the spec interview protocol for AI agents, which have no TTY for `--interactive`. The agent interrogates the human section by section (proposing candidates only from the ticket/request/conversation, never the diff), writes the confirmed answers into the spec, deletes the DRAFT banner, and gets sign-off. Covers ticket-less repos, where the requesting conversation is the ticket: quote the original ask, confirm builder inferences explicitly, and capture the spec when the ask lands rather than at review time.
@@ -82,25 +82,34 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ├── LICENSE
 ├── README.md
 ├── DOCS/
-│   └── THE_SPEC.md
+│   ├── THE_SPEC.md
+│   └── TICKET-SPEC.md
 ├── laws/
 │   ├── THE_SAGE_LAWS.md
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
+│   ├── app-catalog.zsh
+│   ├── machine-setup.zsh
+│   ├── setup-helpers.zsh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
 │   └── tests/spec_builder_test.sh
-├── spec-builder/
-│   └── SKILL.md
-├── ai-battle/
-│   ├── SKILL.md
-│   └── scripts/battle_runner.sh
-├── ai-setup/
-│   ├── SKILL.md
-│   ├── lib/ai-tools.sh
-│   └── scripts/ai-setup.sh
-└── ui-design/
-    └── SKILL.md
+├── skills/
+│   ├── spec-builder/
+│   │   └── SKILL.md
+│   ├── ai-battle/
+│   │   ├── SKILL.md
+│   │   └── scripts/battle_runner.sh
+│   ├── ai-setup/
+│   │   ├── SKILL.md
+│   │   ├── lib/ai-tools.sh
+│   │   └── scripts/ai-setup.sh
+│   ├── machine-setup/
+│   │   ├── SKILL.md
+│   │   ├── repos.conf
+│   │   └── scripts/machine-wizard
+│   └── ui-design/
+│       └── SKILL.md
 ```
 
 ### 3.2 Laws inside this repo
@@ -113,25 +122,34 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ├── LICENSE
 ├── README.md
 ├── DOCS/
-│   └── THE_SPEC.md
+│   ├── THE_SPEC.md
+│   └── TICKET-SPEC.md
 ├── laws/
 │   ├── THE_SAGE_LAWS.md
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
+│   ├── app-catalog.zsh
+│   ├── machine-setup.zsh
+│   ├── setup-helpers.zsh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
 │   └── tests/spec_builder_test.sh
-├── spec-builder/
-│   └── SKILL.md
-├── ai-battle/
-│   ├── SKILL.md
-│   └── scripts/battle_runner.sh
-├── ai-setup/
-│   ├── SKILL.md
-│   ├── lib/ai-tools.sh
-│   └── scripts/ai-setup.sh
-└── ui-design/
-    └── SKILL.md
+├── skills/
+│   ├── spec-builder/
+│   │   └── SKILL.md
+│   ├── ai-battle/
+│   │   ├── SKILL.md
+│   │   └── scripts/battle_runner.sh
+│   ├── ai-setup/
+│   │   ├── SKILL.md
+│   │   ├── lib/ai-tools.sh
+│   │   └── scripts/ai-setup.sh
+│   ├── machine-setup/
+│   │   ├── SKILL.md
+│   │   ├── repos.conf
+│   │   └── scripts/machine-wizard
+│   └── ui-design/
+│       └── SKILL.md
 ```
 
 `~/.ai/laws/global_rules.md` is a symlink to `THE_SAGE_LAWS.md` so every tool's rules path resolves to the same file. Edit `laws/THE_SAGE_LAWS.md` to change the rules.
@@ -139,9 +157,9 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ### 3.3 Tool root symlinks after setup
 
 ```
-~/.claude/skills -> ~/.ai
-~/.copilot/skills -> ~/.ai
-~/.config/devin/skills -> ~/.ai
+~/.claude/skills -> ~/.ai/skills
+~/.copilot/skills -> ~/.ai/skills
+~/.config/devin/skills -> ~/.ai/skills
 ~/.claude/CLAUDE.md -> ~/.ai/laws/global_rules.md
 ~/.config/devin/global_rules.md -> ~/.ai/laws/global_rules.md
 ~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
@@ -170,21 +188,21 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 3. Run `ai-setup` inventory:
 
    ```bash
-   ~/.ai/ai-setup/scripts/ai-setup.sh inventory
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
    ```
 
 4. Hotwire each installed tool:
 
    ```bash
-   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 5. Install missing tools (optional, with confirmation):
 
    ```bash
-   ~/.ai/ai-setup/scripts/ai-setup.sh install <tool>
-   ~/.ai/ai-setup/scripts/ai-setup.sh install <tool> --yes
-   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 6. Verify:
@@ -202,7 +220,7 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 
 ### 4.3 Adding a new AI CLI to the registry
 
-1. Edit `ai-setup/lib/ai-tools.sh`.
+1. Edit `skills/ai-setup/lib/ai-tools.sh`.
 2. Add binary, family, install commands per OS, skill/laws paths, and `KNOWN` flag.
 3. If the paths are verified, set `KNOWN=1`.
 4. Commit and push.
@@ -223,13 +241,13 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 `ai-battle` is an adversarial red-team review that uses this same tool registry to pick a challenger.
 
 ```bash
-~/.ai/ai-battle/scripts/battle_runner.sh --diff <range>
+~/.ai/skills/ai-battle/scripts/battle_runner.sh --diff <range>
 ```
 
 When a spec exists (e.g. this file or a feature-specific spec), pass it with `--spec`:
 
 ```bash
-~/.ai/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
+~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
 ```
 
 If no spec is passed or found (`TICKET-SPEC.md`, `SPEC.md`, `*SPEC.md`, `*spec.md`), the runner scaffolds a DRAFT `TICKET-SPEC.md` via `lib/spec_builder.sh` and exits with code 3. The builder agent then interviews the human for the requirements (protocol: `lib/SPEC_INTERVIEW.md` — proposals may come from the ticket/request, never from the diff), writes the answers into the spec, deletes the DRAFT banner, and re-runs; a human at a terminal can run `spec_builder.sh ensure --interactive` instead. Specs with an intact DRAFT banner are refused; `--no-spec` is the explicit opt-out for battling without spec grounding.
@@ -322,7 +340,7 @@ The canonical `laws/THE_SAGE_LAWS.md` is versioned with the skills so a fresh cl
 
 ### Why is the tool registry in a shared bash library?
 
-`ai-battle` needs the registry to pick a challenger. `ai-setup` needs the same registry to hotwire and install. One source of truth (`ai-setup/lib/ai-tools.sh`) eliminates drift.
+`ai-battle` needs the registry to pick a challenger. `ai-setup` needs the same registry to hotwire and install. One source of truth (`skills/ai-setup/lib/ai-tools.sh`) eliminates drift.
 
 ### Why does `ai-battle` not run in the same process?
 

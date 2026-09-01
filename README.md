@@ -24,7 +24,7 @@ fi
 ### 2. Run the inventory
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
 ```
 
 This shows which of the 11 tracked AI CLIs are installed and which are already hotwired.
@@ -34,7 +34,7 @@ This shows which of the 11 tracked AI CLIs are installed and which are already h
 For each tool that shows `installed: yes`, run:
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
+~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
 ```
 
 Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
@@ -42,7 +42,7 @@ Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, 
 If a tool is installed but has no built-in path map, use `hotwire-generic` with paths the user provides, or ask before touching it:
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>
+~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>
 ```
 
 `hotwire` and `hotwire-generic` make timestamped `.bak` backups before replacing any existing skill/laws directories or files.
@@ -52,13 +52,13 @@ If a tool is installed but has no built-in path map, use `hotwire-generic` with 
 For any tool the user wants that is not installed:
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh install <tool>
+~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
 ```
 
 This prints the install command and notes. Only run it without confirming if the user explicitly told you to use the `--yes` flag:
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh install <tool> --yes
+~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
 ```
 
 After a successful install, immediately run `hotwire <tool>`.
@@ -69,11 +69,11 @@ After a successful install, immediately run `hotwire <tool>`.
 devin skills list
 ```
 
-You should see `ai-battle`, `ai-setup`, `spec-builder`, and `ui-design` from this repo, plus whatever `.agents` skills are present on the system.
+You should see `ai-battle`, `ai-setup`, `machine-setup`, `spec-builder`, and `ui-design` from this repo, plus whatever `.agents` skills are present on the system.
 
 ### 6. Leave the human a report
 
-List what was linked, what was already linked, what was backed up, and which tools are still missing. Point them at `~/.ai/ai-setup/SKILL.md` if they want the full skill prompt.
+List what was linked, what was already linked, what was backed up, and which tools are still missing. Point them at `~/.ai/skills/ai-setup/SKILL.md` if they want the full skill prompt.
 
 ---
 
@@ -96,8 +96,8 @@ List what was linked, what was already linked, what was backed up, and which too
 3. Run the bootstrap:
 
    ```bash
-   ~/.ai/ai-setup/scripts/ai-setup.sh inventory
-   ~/.ai/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
    ```
 
 4. Verify:
@@ -108,11 +108,11 @@ List what was linked, what was already linked, what was backed up, and which too
 
 ### What the wiring actually looks like
 
-`ai-setup` replaces each tool's global skills and laws paths with symlinks to the shared locations:
+`ai-setup` replaces each tool's global skills and laws paths with symlinks to the shared locations. Note the skills link targets `~/.ai/skills`, not the repo root: a tool's skills root must contain `<skill>/SKILL.md` directly, so pointing it at `~/.ai` hides every skill without any error:
 
-- `~/.claude/skills` -> `~/.ai`
-- `~/.copilot/skills` -> `~/.ai`
-- `~/.config/devin/skills` -> `~/.ai`
+- `~/.claude/skills` -> `~/.ai/skills`
+- `~/.copilot/skills` -> `~/.ai/skills`
+- `~/.config/devin/skills` -> `~/.ai/skills`
 - `~/.claude/CLAUDE.md` -> `~/.ai/laws/global_rules.md`
 - `~/.config/devin/global_rules.md` -> `~/.ai/laws/global_rules.md`
 - `~/.copilot/copilot-instructions.md` -> `~/.ai/laws/global_rules.md`
@@ -124,7 +124,7 @@ List what was linked, what was already linked, what was backed up, and which too
 `ai-setup` is idempotent. Just run:
 
 ```bash
-~/.ai/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
 ```
 
 and `hotwire` anything that is not yet linked. Backups are timestamped, so repeated runs never clobber the same `.bak`.
@@ -133,21 +133,21 @@ and `hotwire` anything that is not yet linked. Backups are timestamped, so repea
 
 ## Repo layout
 
-- `ai-setup/` — the setup skill and shared tool registry.
+- `skills/ai-setup/` — the setup skill and shared tool registry.
   - `SKILL.md` — the full prompt for an AI assistant.
   - `scripts/ai-setup.sh` — the setup runner.
   - `lib/ai-tools.sh` — the 11-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
-- `ai-battle/` — adversarial cross-model code review skill.
+- `skills/ai-battle/` — adversarial cross-model code review skill.
   - `SKILL.md` — the battle prompt.
   - `scripts/battle_runner.sh` — the battle dispatcher.
-- `spec-builder/` — find or build a human-owned spec.
-- `ui-design/` — frontend/UI design skill.
+- `skills/spec-builder/` — find or build a human-owned spec.
+- `skills/ui-design/` — frontend/UI design skill.
 - `LICENSE` — MIT.
 - `.gitignore` — ignores `.env`, `*.key`, backups, and local noise.
 
 ## Adding a new skill
 
-1. Create a new folder under `~/.ai/`.
+1. Create a new folder under `~/.ai/skills/`.
 2. Add a `SKILL.md` with YAML frontmatter:
 
    ```markdown
@@ -166,7 +166,7 @@ and `hotwire` anything that is not yet linked. Backups are timestamped, so repea
 
 ## Adding a new AI CLI to the registry
 
-Edit `ai-setup/lib/ai-tools.sh` and add the binary, display name, family, install commands per OS, and best-guess skill/laws paths. Both `ai-setup` and `ai-battle --connect` will use it automatically.
+Edit `skills/ai-setup/lib/ai-tools.sh` and add the binary, display name, family, install commands per OS, and best-guess skill/laws paths. Both `ai-setup` and `ai-battle --connect` will use it automatically.
 
 ## .agents skills
 

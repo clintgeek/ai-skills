@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
-REPO_ROOT="${SCRIPT_DIR:h:h}"
+REPO_ROOT="${SCRIPT_DIR:h:h:h}"
 
 source "$REPO_ROOT/lib/machine-setup.zsh"
 
