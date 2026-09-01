@@ -27,7 +27,8 @@ The wizard at `skills/machine-setup/scripts/machine-wizard`:
    app id, a package name, or a raw install command with `+<text>`, `all` /
    `none`, `list`, `help`, and `done`.
 5. **Installs** — runs the OS-appropriate install command for each selected app.
-6. **Reports** — prints what was installed, skipped, or failed.
+6. **Reports** — prints what was installed, what was already present, what was
+   skipped (no installer for this OS), and what failed.
 
 ## 3. How to run it
 
@@ -112,6 +113,20 @@ Set up repos only:
 
 ## 5. Customizing the catalog
 
+- Re-runs are safe: an app already present is skipped, not reinstalled. "Present"
+  means *available* — a `/usr/bin` tool counts, so brew never installs a duplicate
+  of something the OS ships. Detection order is `APP_CHECK` override → package
+  manager → macOS app bundle (`APP_BUNDLE`) → command on `PATH` (`APP_BIN` maps
+  ids whose binary differs, e.g. `ripgrep` → `rg`). A raw `--extra-cmd` cannot be
+  inspected, so it always runs.
+- `zsh` is deliberately **extras-only**: no role, no category. `lib/bootstrap.sh`
+  already guarantees zsh, and preselecting `brew install zsh` was the only thing
+  putting a Homebrew zsh ahead of the system one on `PATH` — which let the
+  oh-my-zsh installer `chsh` onto a Homebrew-dependent login shell. Use
+  `--extras zsh` (with `BS_ZSH_PREFER=newest`) if you want a newer zsh than the
+  OS ships.
+- `oh-my-zsh` pins `CHSH=no`. Upstream defaults to changing your login shell; the
+  bootstrapper owns that decision.
 - Add new apps in `lib/app-catalog.zsh`. Each app needs `APP_NAME`, `APP_TAGS`
   (categories, plus the special `base` tag for always-install), and usually
   `APP_ROLES`. Every role in `VALID_ROLES` must appear on at least one app or it

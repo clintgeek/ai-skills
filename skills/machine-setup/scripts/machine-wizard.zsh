@@ -18,8 +18,8 @@ REPOS_ONLY=false
 AI=false
 AI_INSTALL=false
 
-typeset -a EXTRAS RAW_CMDS SELECTED_APPS INSTALLED SKIPPED FAILED
-EXTRAS=(); RAW_CMDS=(); SELECTED_APPS=(); INSTALLED=(); SKIPPED=(); FAILED=()
+typeset -a EXTRAS RAW_CMDS SELECTED_APPS INSTALLED ALREADY SKIPPED FAILED
+EXTRAS=(); RAW_CMDS=(); SELECTED_APPS=(); INSTALLED=(); ALREADY=(); SKIPPED=(); FAILED=()
 
 # Roles from DOCS/TICKET-SPEC.md Req 5. Every one of these must carry apps in
 # lib/app-catalog.zsh, or it selects nothing but `base`; checked below and
@@ -333,10 +333,12 @@ print_plan() {
   local item cmd
   for item in "${SELECTED_APPS[@]}"; do
     cmd="$(item_install_cmd "$item")"
-    if [[ -n "$cmd" ]]; then
-      echo "  install $(item_label "$item"): $cmd"
-    else
+    if [[ -z "$cmd" ]]; then
       echo "  skip $(item_label "$item") (no $OS_KIND installer)"
+    elif item_is_installed "$item"; then
+      echo "  install $(item_label "$item"): $cmd   [already installed — will skip]"
+    else
+      echo "  install $(item_label "$item"): $cmd"
     fi
   done
   if [[ "$AI" == true && "$REPOS_ONLY" != true ]]; then
@@ -384,6 +386,11 @@ execute_plan() {
       SKIPPED+=("$item")
       continue
     fi
+    if item_is_installed "$item"; then
+      log "  $(item_label "$item"): already installed, skipping"
+      ALREADY+=("$item")
+      continue
+    fi
     log "  installing $(item_label "$item")..."
     if eval "$cmd"; then
       INSTALLED+=("$item")
@@ -402,6 +409,8 @@ report() {
   local item
   printf "Installed: %d\n" "${#INSTALLED[@]}"
   for item in "${INSTALLED[@]}"; do echo "  + $(item_label "$item")"; done
+  printf "Already:   %d\n" "${#ALREADY[@]}"
+  for item in "${ALREADY[@]}"; do echo "  = $(item_label "$item")"; done
   printf "Skipped:   %d\n" "${#SKIPPED[@]}"
   for item in "${SKIPPED[@]}"; do echo "  - $(item_label "$item")"; done
   printf "Failed:    %d\n" "${#FAILED[@]}"

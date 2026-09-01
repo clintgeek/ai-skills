@@ -67,7 +67,7 @@ APP_NAME[fd]="fd";                      APP_TAGS[fd]="cli,base";                
 APP_NAME[htop]="htop";                  APP_TAGS[htop]="cli,base";                 APP_ROLES[htop]="admin,dev"
 APP_NAME[btop]="btop";                  APP_TAGS[btop]="cli,base";                 APP_ROLES[btop]="admin"
 APP_NAME[tmux]="tmux";                  APP_TAGS[tmux]="cli,base,terminal";        APP_ROLES[tmux]="dev,admin"
-APP_NAME[zsh]="zsh";                    APP_TAGS[zsh]="cli,base,terminal";         APP_ROLES[zsh]="dev,admin,general"
+APP_NAME[zsh]="zsh";                    APP_TAGS[zsh]="";                          APP_ROLES[zsh]=""   # extras-only
 APP_NAME[oh-my-zsh]="Oh My Zsh";        APP_TAGS[oh-my-zsh]="cli,base,terminal";   APP_ROLES[oh-my-zsh]="dev,admin,general"
 
 # --- terminal / desktop ---------------------------------------------------
@@ -106,6 +106,52 @@ APP_NAME[duckdb]="DuckDB";              APP_TAGS[duckdb]="cli";                 
 
 # --- gaming ---------------------------------------------------------------
 APP_NAME[steam]="Steam";                APP_TAGS[steam]="media";                   APP_ROLES[steam]="gaming"
+
+# Apps deliberately reachable ONLY via --extras: no `base`, no role. They exist
+# in the catalog so `--extras <id>` resolves to a real install command, but they
+# are never preselected. The role-coverage test exempts these.
+APP_EXTRAS_ONLY=(zsh)
+
+# How to tell an app is ALREADY installed, when it cannot be derived from the
+# install command. Everything else is inferred: `brew install --cask X` checks
+# the cask list, `brew install X` the formula list, a Linux package name the
+# local package database, and as a last resort a CLI of the same name on PATH.
+# Evaluated with `eval`, same trust level as the install commands beside it.
+typeset -A APP_CHECK
+APP_CHECK[oh-my-zsh]='[[ -d "${ZSH:-$HOME/.oh-my-zsh}" ]]'
+
+# Binary to look for on PATH when the app id is not the command name. "Installed"
+# has to mean "available", not "installed by this package manager" -- git and jq
+# ship in /usr/bin on macOS, and checking brew alone would reinstall brew copies
+# of tools that already work.
+typeset -A APP_BIN
+APP_BIN[ripgrep]="rg"
+APP_BIN[visual-studio-code]="code"
+APP_BIN[python]="python3"
+APP_BIN[imagemagick]="magick"
+APP_BIN[1password]="op"
+
+# macOS app bundle, for casks. A GUI app installed by hand (dragged into
+# /Applications) is absent from brew's cask list but is still installed, and
+# reinstalling over it is what makes a cask install fail on re-runs.
+typeset -A APP_BUNDLE
+APP_BUNDLE[iterm2]="iTerm.app"
+APP_BUNDLE[raycast]="Raycast.app"
+APP_BUNDLE[1password]="1Password.app"
+APP_BUNDLE[arc]="Arc.app"
+APP_BUNDLE[firefox]="Firefox.app"
+APP_BUNDLE[visual-studio-code]="Visual Studio Code.app"
+APP_BUNDLE[cursor]="Cursor.app"
+APP_BUNDLE[docker]="Docker.app"
+APP_BUNDLE[postman]="Postman.app"
+APP_BUNDLE[slack]="Slack.app"
+APP_BUNDLE[zoom]="zoom.us.app"
+APP_BUNDLE[notion]="Notion.app"
+APP_BUNDLE[rectangle]="Rectangle.app"
+APP_BUNDLE[figma]="Figma.app"
+APP_BUNDLE[obsidian]="Obsidian.app"
+APP_BUNDLE[steam]="Steam.app"
+APP_BUNDLE[discord]="Discord.app"
 
 typeset -A APP_PACKAGE_LINUX APP_PACKAGE_APT APP_INSTALL_MAC APP_INSTALL_LINUX APP_INSTALL_WINDOWS
 
@@ -147,8 +193,8 @@ APP_INSTALL_MAC[zsh]="brew install zsh"
 APP_PACKAGE_LINUX[zsh]="zsh"
 APP_INSTALL_WINDOWS[zsh]=""
 
-APP_INSTALL_MAC[oh-my-zsh]='RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
-APP_INSTALL_LINUX[oh-my-zsh]='RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
+APP_INSTALL_MAC[oh-my-zsh]='CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
+APP_INSTALL_LINUX[oh-my-zsh]='CHSH=no RUNZSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
 APP_INSTALL_WINDOWS[oh-my-zsh]=""
 
 APP_INSTALL_MAC[iterm2]="brew install --cask iterm2"

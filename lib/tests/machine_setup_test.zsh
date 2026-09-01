@@ -46,18 +46,68 @@ echo "== catalog integrity =="
 missing=()
 for a in "${APPS[@]}"; do
   [[ -n "${APP_NAME[$a]:-}" ]] || missing+=("$a name")
+  # An extras-only app has no tags and no roles on purpose: it must be
+  # unreachable by every selection path and installable only by explicit name.
+  (( ${APP_EXTRAS_ONLY[(Ie)$a]} )) && continue
   [[ -n "${APP_TAGS[$a]:-}" ]] || missing+=("$a tags")
 done
 check "every app has a name and tags" "" "${missing[*]}"
 
-# An app reachable by no role and no category, and not in base, is dead weight.
+# The point of extras-only is that NOTHING selects it implicitly.
+leaky=()
+for a in "${APP_EXTRAS_ONLY[@]}"; do
+  [[ -z "${APP_TAGS[$a]:-}" ]]  || leaky+=("$a:tagged")
+  [[ -z "${APP_ROLES[$a]:-}" ]] || leaky+=("$a:roled")
+done
+check "extras-only apps carry no role or category" "" "${leaky[*]}"
+
+# An app reachable by no role and no category, and not in base, is dead weight --
+# unless it is deliberately extras-only (APP_EXTRAS_ONLY), which exists so
+# `--extras <id>` resolves to a real install command without ever being
+# preselected.
 orphans=()
 for a in "${APPS[@]}"; do
   [[ -n "${APP_ROLES[$a]:-}" ]] && continue
   [[ "${APP_TAGS[$a]}" == *base* ]] && continue
+  (( ${APP_EXTRAS_ONLY[(Ie)$a]} )) && continue
   orphans+=("$a")
 done
 check "no app is unreachable by every role" "" "${orphans[*]}"
+
+# Every extras-only app must still be installable by name, or the exemption is
+# just hiding a broken entry.
+broken_extras=()
+for a in "${APP_EXTRAS_ONLY[@]}"; do
+  [[ -n "${APP_NAME[$a]:-}" ]] || broken_extras+=("$a:noname")
+  [[ "$(classify_extra "$a")" == "app:$a" ]] || broken_extras+=("$a:unclassified")
+done
+check "extras-only apps are still reachable via --extras" "" "${broken_extras[*]}"
+
+echo "== zsh is not preselected (bootstrapper owns it) =="
+# The bootstrapper guarantees zsh, and machine-wizard.zsh is itself a zsh
+# script, so preselecting `brew install zsh` was redundant. Worse: on macOS it
+# was the only thing creating /opt/homebrew/bin/zsh, which let the oh-my-zsh
+# installer chsh onto a Homebrew-dependent login shell instead of the system zsh
+# the bootstrapper deliberately picked.
+for r in dev admin general; do
+  out="$(plan --role "$r" --categories cli,terminal)"
+  assert "role '$r' does not preselect brew's zsh" \
+    $(! grep -qE '^  install zsh:' <<<"$out" && echo 0 || echo 1)
+done
+out="$(plan --role admin --categories cli --extras zsh)"
+assert "--extras zsh still installs it on request" $(grep -qE '^  install zsh:' <<<"$out" && echo 0 || echo 1)
+
+echo "== oh-my-zsh must not steal the login shell =="
+# Upstream defaults CHSH=yes and runs `chsh -s "$(command -v zsh)"` (sudo on
+# macOS). The bootstrapper owns the login shell; nothing downstream overrides it.
+assert "APP_INSTALL_MAC[oh-my-zsh] pins CHSH=no" \
+  $([[ "${APP_INSTALL_MAC[oh-my-zsh]}" == *"CHSH=no"* ]] && echo 0 || echo 1)
+assert "APP_INSTALL_LINUX[oh-my-zsh] pins CHSH=no" \
+  $([[ "${APP_INSTALL_LINUX[oh-my-zsh]}" == *"CHSH=no"* ]] && echo 0 || echo 1)
+out="$(plan --role admin --categories cli)"
+assert "the planned oh-my-zsh command carries CHSH=no" $(grep -q 'CHSH=no' <<<"$out" && echo 0 || echo 1)
+assert "oh-my-zsh is still planned for headless roles (it is terminal QoL)" \
+  $(grep -qi 'Oh My Zsh' <<<"$out" && echo 0 || echo 1)
 
 # Roles and categories must not overlap -- conflating them is what made
 # `--role dev` and `--categories dev` identical.
@@ -258,6 +308,59 @@ check "pkg item -> package command"  "brew install nvim"  "$(item_install_cmd pk
 check "cmd item -> verbatim"         "make && make check" "$(item_install_cmd 'cmd:make && make check')"
 check "app label uses the catalog name" "Visual Studio Code" "$(item_label app:visual-studio-code)"
 check "pkg label is marked as a package" "nvim (package)"     "$(item_label pkg:nvim)"
+
+echo "== already-installed detection (re-runs must not reinstall) =="
+# execute_plan used to eval every install command unconditionally. Harmless-ish
+# for brew formulae, but a cask install over an existing app errors and the
+# oh-my-zsh installer exits 1 when ~/.oh-my-zsh exists -- so a second run on a
+# healthy machine reported failures and exited non-zero.
+
+# "Installed" must mean AVAILABLE, not "installed by this package manager":
+# git and jq ship in /usr/bin on macOS and must not be reinstalled from brew.
+for probe in git jq; do
+  if command -v "$probe" >/dev/null 2>&1; then
+    assert "$probe on PATH counts as installed even if brew does not have it" \
+      $(item_is_installed "app:$probe" && echo 0 || echo 1)
+  fi
+done
+
+# An app id that is not its binary name must still resolve.
+if command -v rg >/dev/null 2>&1; then
+  assert "ripgrep resolves through APP_BIN (id 'ripgrep' -> binary 'rg')" \
+    $(item_is_installed app:ripgrep && echo 0 || echo 1)
+fi
+
+# A raw command carries no way to know what it installs, so it must always run
+# rather than be guessed at.
+assert "a cmd: item is never treated as already installed" \
+  $(! item_is_installed 'cmd:echo hi' && echo 0 || echo 1)
+
+# Something certainly absent must not be claimed as present.
+assert "an absent package is not reported installed" \
+  $(! item_is_installed 'pkg:definitely-not-a-real-package-xyz' && echo 0 || echo 1)
+
+# The catalog override wins over inference.
+if [[ -d "${ZSH:-$HOME/.oh-my-zsh}" ]]; then
+  assert "APP_CHECK detects oh-my-zsh via its directory" \
+    $(item_is_installed app:oh-my-zsh && echo 0 || echo 1)
+fi
+
+# The plan must SAY it will skip, while still showing the command it would run.
+out="$(plan --role dev --categories cli)"
+if item_is_installed app:git; then
+  assert "the plan marks an already-installed app" \
+    $(grep -q 'install Git:.*already installed' <<<"$out" && echo 0 || echo 1)
+  assert "  and still shows the command it would have run" \
+    $(grep -q 'install Git: brew install git' <<<"$out" && echo 0 || echo 1)
+fi
+
+# The index must be built once, not once per app -- a per-app `brew list` would
+# be ~25 subprocesses. Guard the cost so nobody reintroduces that.
+start=$SECONDS
+plan --role dev --categories cli,browser,productivity,dev-tools >/dev/null
+elapsed=$(( SECONDS - start ))
+assert "a full plan completes quickly (${elapsed}s, cached index)" \
+  $([[ "$elapsed" -lt 10 ]] && echo 0 || echo 1)
 
 echo "== P1-5: interactive checklist can toggle and add =="
 # Drive the real interactive loop over a plain pipe via the documented seam.

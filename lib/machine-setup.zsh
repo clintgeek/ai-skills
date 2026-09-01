@@ -139,6 +139,114 @@ pkg_install_cmd() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Already-installed detection
+# ---------------------------------------------------------------------------
+# execute_plan used to `eval` every selected app's install command
+# unconditionally, so a re-run reinstalled everything. Mostly that was just slow
+# and noisy (brew auto-updates each time), but a cask install over an existing
+# app errors, and the oh-my-zsh installer exits 1 outright when ~/.oh-my-zsh is
+# present -- so a second run on a working machine reported failures and exited
+# non-zero with nothing actually wrong. ai-setup already checked before
+# installing; this brings machine-setup in line.
+#
+# The index is built ONCE per run. A per-app `brew list <x>` would be one
+# subprocess per catalog entry -- ~25 of them, seconds of wall clock -- so the
+# full lists are read up front and tested in memory.
+
+typeset -A INSTALLED_FORMULA_SET INSTALLED_CASK_SET INSTALLED_PKG_SET
+INSTALLED_INDEX_LOADED=false
+
+load_installed_index() {
+  [[ "$INSTALLED_INDEX_LOADED" == true ]] && return 0
+  INSTALLED_INDEX_LOADED=true
+  local x
+  case "$PKG_MGR" in
+    brew)
+      for x in ${(f)"$(brew list --formula -1 2>/dev/null)"}; do INSTALLED_FORMULA_SET[$x]=1; done
+      for x in ${(f)"$(brew list --cask -1 2>/dev/null)"}; do INSTALLED_CASK_SET[$x]=1; done
+      ;;
+    apt-get|apt)
+      for x in ${(f)"$(dpkg-query -W -f='${Package}\n' 2>/dev/null)"}; do INSTALLED_PKG_SET[$x]=1; done
+      ;;
+    dnf|yum|zypper)
+      for x in ${(f)"$(rpm -qa --qf '%{NAME}\n' 2>/dev/null)"}; do INSTALLED_PKG_SET[$x]=1; done
+      ;;
+    pacman)
+      for x in ${(f)"$(pacman -Qq 2>/dev/null)"}; do INSTALLED_PKG_SET[$x]=1; done
+      ;;
+    apk)
+      for x in ${(f)"$(apk info 2>/dev/null)"}; do INSTALLED_PKG_SET[$x]=1; done
+      ;;
+  esac
+  return 0
+}
+
+pkg_is_installed() {
+  local name="$1"
+  [[ -n "$name" ]] || return 1
+  load_installed_index
+  if [[ "$PKG_MGR" == brew ]]; then
+    [[ -n "${INSTALLED_FORMULA_SET[$name]:-}" ]]
+  else
+    [[ -n "${INSTALLED_PKG_SET[$name]:-}" ]]
+  fi
+}
+
+cask_is_installed() {
+  local name="$1"
+  [[ -n "$name" ]] || return 1
+  load_installed_index
+  [[ -n "${INSTALLED_CASK_SET[$name]:-}" ]]
+}
+
+# rc 0 = already installed, rc 1 = not installed / cannot tell.
+# A `cmd:` item is always rc 1: an arbitrary shell command carries no way to
+# know what it would install, so it runs every time (say so, do not guess).
+item_is_installed() {
+  local kind="$(item_kind "$1")" value="$(item_value "$1")"
+  case "$kind" in
+    app)
+      # An explicit catalog check wins over anything inferred.
+      if [[ -n "${APP_CHECK[$value]:-}" ]]; then
+        eval "${APP_CHECK[$value]}"
+        return $?
+      fi
+      # Any positive signal counts. These are checked in order and the first
+      # "yes" wins; a "no" falls through to the next, because none of them is
+      # authoritative on its own.
+      local cmd="$(install_cmd "$value")"
+
+      # 1. Package manager.
+      case "$cmd" in
+        *"brew install --cask "*)
+          cask_is_installed "${cmd##*--cask }" && return 0 ;;
+        "brew install "*)
+          pkg_is_installed "${cmd#brew install }" && return 0 ;;
+      esac
+      if [[ "$OS_KIND" != mac ]]; then
+        pkg_is_installed "$(linux_pkg_name "$value")" && return 0
+      fi
+
+      # 2. macOS app bundle -- a cask dragged in by hand is still installed.
+      if [[ "$OS_KIND" == mac && -n "${APP_BUNDLE[$value]:-}" ]]; then
+        [[ -d "/Applications/${APP_BUNDLE[$value]}" ]] && return 0
+        [[ -d "$HOME/Applications/${APP_BUNDLE[$value]}" ]] && return 0
+      fi
+
+      # 3. The command on PATH. This is what makes "installed" mean "available"
+      # rather than "installed by this package manager" -- git and jq live in
+      # /usr/bin on macOS and must not be reinstalled from brew.
+      command -v "${APP_BIN[$value]:-$value}" >/dev/null 2>&1 && return 0
+      return 1 ;;
+    pkg)
+      pkg_is_installed "$value"
+      return $? ;;
+    *)
+      return 1 ;;
+  esac
+}
+
 item_install_cmd() {
   local kind="$(item_kind "$1")" value="$(item_value "$1")"
   case "$kind" in
