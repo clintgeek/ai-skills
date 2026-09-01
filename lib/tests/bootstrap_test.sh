@@ -169,12 +169,13 @@ out="$(bs "bs_ensure_in_etc_shells '$(bs 'bs_preferred_login_zsh')'")"
 assert "does not touch /etc/shells when the shell is already listed" $(! grep -q 'sudo' <<<"$out" && echo 0 || echo 1)
 
 echo "== re-exec helpers =="
-cat > "$WORK/probe.zsh" <<'Z'
-echo "ZSH_VERSION=$ZSH_VERSION argv=$*"
-Z
-out="$(bs "bs_exec_zsh '$WORK/probe.zsh' one two")"
-assert "bs_exec_zsh runs the script under zsh" $(grep -q 'ZSH_VERSION=' <<<"$out" && echo 0 || echo 1)
-assert "  and forwards arguments" $(grep -q 'argv=one two' <<<"$out" && echo 0 || echo 1)
+# bs_exec_zsh was deleted: nothing has needed it since machine-setup became a
+# POSIX sh script, and dead code with a passing test looks maintained.
+assert "bs_exec_zsh no longer exists" \
+  $(! grep -qE '^bs_exec_zsh\(\)' "$BS" && echo 0 || echo 1)
+assert "  and nothing outside bootstrap.sh references it" \
+  $(! grep -rqE '\bbs_exec_zsh\b' "$SCRIPT_DIR/../../skills" 2>/dev/null && echo 0 || echo 1)
+
 cat > "$WORK/probe.sh" <<'B'
 echo "BASH_MAJOR=${BASH_VERSINFO[0]} argv=$*"
 B
@@ -182,8 +183,73 @@ out="$(bs "bs_exec_bash '$WORK/probe.sh' three four")"
 maj="$(sed -n 's/.*BASH_MAJOR=\([0-9]*\).*/\1/p' <<<"$out")"
 assert "bs_exec_bash runs the script under bash >= 4 (major $maj)" $([[ "${maj:-0}" -ge 4 ]] && echo 0 || echo 1)
 assert "  and forwards arguments" $(grep -q 'argv=three four' <<<"$out" && echo 0 || echo 1)
-out="$(bs "bs_exec_zsh '$WORK/nope.zsh'")"
+out="$(bs "bs_exec_bash '$WORK/nope.sh'")"
 assert "re-exec of a missing script fails loudly" $(grep -q 'no such script' <<<"$out" && echo 0 || echo 1)
+
+echo "== dry run reports no interpreter path rather than inventing one =="
+# The dry-run branches used to set BS_ZSH=/usr/bin/zsh (wrong on macOS) and
+# BS_BASH=$(bs_brew_prefix)/bin/bash (nonsense on Linux, and absent either way),
+# then bs_exec_* would exec that phantom. Nothing was installed, so there is no
+# path to report and the variable must stay empty.
+STUB3="$WORK/bash3"
+mkdir -p "$STUB3"
+cat > "$STUB3/bash" <<'S3'
+#!/bin/sh
+case "$2" in
+  *BASH_VERSINFO*) echo 3 ;;
+  *BASH_VERSION*)  echo "3.2.57(1)-release" ;;
+  *) exit 0 ;;
+esac
+S3
+chmod +x "$STUB3/bash"
+out="$(bs "BS_DRY_RUN=1; export BS_DRY_RUN
+          BS_ASSUME_YES=1; export BS_ASSUME_YES
+          BS_BASH_SEARCH='$STUB3/bash'; export BS_BASH_SEARCH
+          PATH='$STUB3:/usr/bin:/bin'
+          bs_detect_os; bs_detect_pkg_mgr
+          bs_ensure_bash >/dev/null 2>&1
+          echo \"BS_BASH=[\$BS_BASH]\"")"
+assert "dry-run bs_ensure_bash leaves BS_BASH empty, not guessed" \
+  $(grep -q 'BS_BASH=\[\]' <<<"$out" && echo 0 || echo 1)
+assert "  and no /opt/homebrew guess leaks out" \
+  $(! grep -q 'homebrew' <<<"$out" && echo 0 || echo 1)
+
+# The guard itself. bs_exec_bash RE-RESOLVES BS_BASH on entry and will find or
+# install a real bash, so presetting the variable proves nothing and on a
+# developer machine the guard is unreachable. Stub the discovery instead, which
+# is the only way to exercise the last-resort branch deterministically.
+out="$(bs "bs_find_bash() { return 1; }
+           bs_ensure_brew() { return 0; }
+           bs_ensure_bash() { BS_BASH=''; return 0; }
+           bs_exec_bash '$WORK/probe.sh' 2>&1; echo rc=\$?")"
+assert "bs_exec_bash refuses when no interpreter was resolved" \
+  $(grep -qE 'rc=[1-9]' <<<"$out" && echo 0 || echo 1)
+assert "  saying no bash is available, not 'exec: not found'" \
+  $(grep -qi 'no bash >=' <<<"$out" && echo 0 || echo 1)
+assert "  and does not run the script" \
+  $(! grep -q 'BASH_MAJOR=' <<<"$out" && echo 0 || echo 1)
+
+# Same, with a path that is set but absent.
+out="$(bs "bs_find_bash() { return 1; }
+           bs_ensure_brew() { return 0; }
+           bs_ensure_bash() { BS_BASH=/nonexistent/bash; return 0; }
+           bs_exec_bash '$WORK/probe.sh' 2>&1; echo rc=\$?")"
+assert "  and refuses a non-executable interpreter path" \
+  $(grep -qE 'rc=[1-9]' <<<"$out" && echo 0 || echo 1)
+
+# Under BS_DRY_RUN the refusal must explain that nothing was installed.
+out="$(bs "BS_DRY_RUN=1; export BS_DRY_RUN
+           bs_find_bash() { return 1; }
+           bs_ensure_brew() { return 0; }
+           bs_ensure_bash() { BS_BASH=''; return 0; }
+           bs_exec_bash '$WORK/probe.sh' 2>&1")"
+assert "  and a dry-run refusal says why nothing was installed" \
+  $(grep -qi 'BS_DRY_RUN is set' <<<"$out" && echo 0 || echo 1)
+
+# Control: with discovery working it must still actually exec.
+out="$(bs "bs_exec_bash '$WORK/probe.sh' 2>&1")"
+assert "  (control) it still execs when a real bash is available" \
+  $(grep -q 'BASH_MAJOR=' <<<"$out" && echo 0 || echo 1)
 
 echo ""
 echo "$PASS passed, $FAIL failed"

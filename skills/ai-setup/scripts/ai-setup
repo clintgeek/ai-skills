@@ -10,6 +10,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 . "$REPO_ROOT/lib/bootstrap.sh"
 
+# --yes is forwarded to the bootstrapper; --dry-run deliberately is NOT.
+#
+# They are different scopes. `ai-setup --dry-run` means "do not dispatch / do not
+# act" INSIDE the tool; it says nothing about whether this machine may have a
+# bash installed on it. Mapping it to BS_DRY_RUN would give an inner flag the
+# power to change what gets installed, and would replace an honest "no bash 4+,
+# and I will not install one unprompted" with a dry run that cannot run
+# anything. Use BS_DRY_RUN=1 explicitly to hold the machine still.
 for arg in "$@"; do
   case "$arg" in
     --yes) BS_ASSUME_YES=1; export BS_ASSUME_YES ;;

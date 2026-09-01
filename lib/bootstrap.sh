@@ -10,8 +10,11 @@
 # Usage (source it; it runs nothing on its own):
 #   . "$REPO_ROOT/lib/bootstrap.sh"
 #   bs_bootstrap                 # brew (mac) + zsh + modern bash + zsh default
-#   bs_exec_zsh  <script> "$@"   # re-exec a .zsh script under zsh
 #   bs_exec_bash <script> "$@"   # re-exec a .sh script under bash 4+
+#
+# There is deliberately no bs_exec_zsh: nothing needs it since machine-setup
+# became a POSIX sh script. If a zsh consumer appears, it comes back with that
+# consumer rather than sitting here as dead code with a passing test.
 #
 # Knobs (environment):
 #   BS_ASSUME_YES=1   install without prompting (the caller's --yes)
@@ -237,7 +240,11 @@ bs_ensure_zsh() {
   bs_confirm "  Install zsh now?" || return 1
   bs_pkg_install zsh || return 1
   if [ -n "${BS_DRY_RUN:-}" ]; then
-    BS_ZSH="/usr/bin/zsh"
+    # Nothing was installed, so there is no path to report. Do NOT invent one:
+    # this used to hardcode /usr/bin/zsh (wrong on macOS, where it is /bin/zsh)
+    # and a caller that re-exec'd BS_ZSH would exec something absent.
+    BS_ZSH=""
+    bs_log "  DRY RUN: zsh would be installed via ${BS_PKG_MGR:-the package manager}; no path to report yet"
     return 0
   fi
   hash -r 2>/dev/null || true
@@ -357,7 +364,11 @@ bs_ensure_bash() {
   bs_confirm "  Install a modern bash now?" || return 1
   bs_pkg_install bash || return 1
   if [ -n "${BS_DRY_RUN:-}" ]; then
-    BS_BASH="$(bs_brew_prefix)/bin/bash"
+    # As above: no invented path. This used to guess "$(bs_brew_prefix)/bin/bash"
+    # regardless of OS, which is nonsense on Linux where apt installs to
+    # /usr/bin/bash -- and the file does not exist either way during a dry run.
+    BS_BASH=""
+    bs_log "  DRY RUN: bash would be installed via ${BS_PKG_MGR:-the package manager}; no path to report yet"
     return 0
   fi
   hash -r 2>/dev/null || true
@@ -387,19 +398,6 @@ bs_bootstrap() {
   return "$_bs_rc"
 }
 
-# Re-exec a .zsh script under zsh, installing zsh first if needed.
-bs_exec_zsh() {
-  _bs_script="$1"
-  shift
-  [ -f "$_bs_script" ] || { bs_die "no such script: $_bs_script"; return 1; }
-  # Reuse an already-resolved zsh so a bs_bootstrap earlier in the same process
-  # does not get its "zsh: already installed" line printed twice.
-  if [ -z "$BS_ZSH" ] || [ ! -x "$BS_ZSH" ]; then
-    bs_ensure_zsh || return 1
-  fi
-  exec "$BS_ZSH" "$_bs_script" "$@"
-}
-
 # Re-exec a bash script under a bash 4+, installing one first if needed.
 bs_exec_bash() {
   _bs_script="$1"
@@ -411,6 +409,19 @@ bs_exec_bash() {
     bs_ensure_brew || return 1
     bs_detect_pkg_mgr
     bs_ensure_bash || return 1
+  fi
+  # Refuse rather than exec something absent. Under BS_DRY_RUN nothing was
+  # installed, so BS_BASH is deliberately empty; previously this branch invented
+  # a path and exec'd it, turning a clear refusal into "exec: not found".
+  if [ -z "$BS_BASH" ] || [ ! -x "$BS_BASH" ]; then
+    bs_warn "cannot run $(basename "$_bs_script"): no bash >= $BS_MIN_BASH_MAJOR available."
+    if [ -n "${BS_DRY_RUN:-}" ]; then
+      bs_warn "  BS_DRY_RUN is set, so nothing was installed and there is nothing to run under."
+      bs_warn "  Re-run without BS_DRY_RUN to install one."
+    else
+      bs_warn "  Install one (brew install bash / apt install bash) and retry."
+    fi
+    return 1
   fi
   exec "$BS_BASH" "$_bs_script" "$@"
 }
