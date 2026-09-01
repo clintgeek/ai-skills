@@ -16,6 +16,11 @@ PASS=0 FAIL=0
 check() { if [[ "$2" == "$3" ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1 (expected '$2', got '$3')" >&2; fi }
 assert() { if [[ "$2" -eq 0 ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1" >&2; fi }
 
+# Print the CODE of a shell file: comments and single-quoted spans removed.
+# Searching a file for a construct it documents avoiding otherwise matches the
+# documentation -- which happened repeatedly in this session before this existed.
+code_of() { sed -e 's/[[:space:]]*#.*$//' -e "s/'[^']*'/''/g" "$1"; }
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/machine_setup_test.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
@@ -116,6 +121,38 @@ if command -v claude >/dev/null 2>&1; then
     $(grep -q 'Refusing to link tools at a missing repo' <<<"$out" && echo 0 || echo 1)
   assert "  and creates nothing" $([[ ! -d /definitely ]] && echo 0 || echo 1)
 fi
+
+echo "== repos.conf paths expand without eval =="
+# The parser used `eval "echo \"$rpath\""` to expand a literal $HOME, which
+# executes command substitution embedded in a path value. repos.conf is committed
+# data the owner controls, but reading data should not require an eval.
+! code_of "$MS" | grep -qE 'eval "echo'
+assert "no eval-based path expansion remains" $?
+
+out="$("$MS" --dry-run --no-clis < /dev/null 2>&1)"
+assert "\$HOME in repos.conf still resolves to a real path" \
+  $(grep -qF "$HOME" <<<"$out" && echo 0 || echo 1)
+
+# The point of dropping eval: a command substitution in a path value must be
+# treated as literal text, never executed.
+EVILDIR="$WORK/evilrepo"; mkdir -p "$EVILDIR"
+cp -R "$REPO_ROOT/lib" "$REPO_ROOT/skills" "$EVILDIR/" 2>/dev/null
+cat > "$EVILDIR/skills/machine-setup/repos.conf" <<EOF
+MACHINE_REPOS=(evil)
+typeset -A REPO_NAME REPO_PATH REPO_URL REPO_POST_CLONE
+REPO_NAME[evil]="Evil"
+REPO_PATH[evil]="\$HOME/probe-\$(touch $WORK/PWNED && echo pwned)"
+REPO_URL[evil]="https://example.invalid/x.git"
+REPO_POST_CLONE[evil]=""
+EOF
+rm -f "$WORK/PWNED"
+"$EVILDIR/skills/machine-setup/scripts/machine-setup" --dry-run --no-clis < /dev/null >/dev/null 2>&1
+assert "a command substitution in a repo path is NOT executed" \
+  $([[ ! -e "$WORK/PWNED" ]] && echo 0 || echo 1)
+# The post-clone hook IS still eval'd, deliberately: it is a hook, and running it
+# is the point. It must be logged before it runs so it is never a surprise.
+assert "the post-clone hook is logged before it runs" \
+  $(grep -q 'log "    post-clone: \$rpost"' "$MS" && echo 0 || echo 1)
 
 echo "== the CLI roster is shared, not duplicated =="
 # Line-anchored: a mention in a comment is not a definition.

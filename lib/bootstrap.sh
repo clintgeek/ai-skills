@@ -31,6 +31,18 @@
 #   BS_ZSH_SEARCH         candidate zsh paths         (default: /bin, /usr/bin, /usr/local, brew)
 #   BS_SYSTEM_ZSH_SEARCH  "system" zsh paths for the login-shell preference
 
+# refuse_if_root lives in fs-helpers.sh. Sourced here so EVERY consumer of the
+# bootstrapper gets it, not only the ones that remembered to include it: the sh
+# wrappers source just this file, and bs_exec_bash INSTALLS software, so the
+# guard has to exist at this level.
+#
+# Every caller sets REPO_ROOT before sourcing this (machine-setup and both
+# wrappers do). $0 is useless here -- when sourced it is the CALLER's $0, not
+# this file's path.
+if [ -n "${REPO_ROOT:-}" ] && [ -f "$REPO_ROOT/lib/fs-helpers.sh" ]; then
+  . "$REPO_ROOT/lib/fs-helpers.sh"
+fi
+
 BS_MIN_BASH_MAJOR=4
 BS_BASH=""          # set by bs_ensure_bash: path to a bash >= BS_MIN_BASH_MAJOR
 BS_ZSH=""           # set by bs_ensure_zsh: path to a usable zsh
@@ -210,16 +222,38 @@ bs_brew_persist() {
   _bs_prefix="$(bs_brew_prefix)"
   _bs_line="eval \"\$($_bs_prefix/bin/brew shellenv)\""
   _bs_profile="$HOME/.zprofile"
-  if [ -f "$_bs_profile" ] && grep -qF "brew shellenv" "$_bs_profile" 2>/dev/null; then
-    bs_log "  brew shellenv already in $_bs_profile"
+
+  # If ~/.zprofile is a symlink -- and a dotfiles setup usually makes it one --
+  # appending writes THROUGH it into the repo. Say so and name the real file,
+  # rather than silently dirtying someone's tracked dotfiles.
+  _bs_real="$_bs_profile"
+  if [ -L "$_bs_profile" ]; then
+    _bs_real="$(_fs_abs_link_target "$_bs_profile" 2>/dev/null || readlink "$_bs_profile")"
+    bs_log "  note: $_bs_profile is a symlink; the line goes into $_bs_real"
+  fi
+
+  # Exact-line match, not a substring. `grep -qF "brew shellenv"` also matched a
+  # COMMENT mentioning it, or a line for a DIFFERENT brew prefix, and then
+  # skipped the append the machine actually needed.
+  if [ -f "$_bs_real" ] && grep -qxF "$_bs_line" "$_bs_real" 2>/dev/null; then
+    bs_log "  brew shellenv already in $_bs_real"
     return 0
   fi
   if [ -n "${BS_DRY_RUN:-}" ]; then
-    bs_log "  DRY RUN: append 'brew shellenv' to $_bs_profile"
+    bs_log "  DRY RUN: append brew shellenv for $_bs_prefix to $_bs_real"
     return 0
   fi
-  printf '\n# Added by ai-skills bootstrap\n%s\n' "$_bs_line" >> "$_bs_profile"
-  bs_log "  added brew shellenv to $_bs_profile"
+
+  # Copy-backup before touching it. NOT backup_path, which MOVES the file --
+  # moving a symlink target would break the dotfiles layout it belongs to.
+  if [ -f "$_bs_real" ]; then
+    _bs_bak="${_bs_real}.bak-${BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
+    cp "$_bs_real" "$_bs_bak" 2>/dev/null \
+      && bs_log "  backed up $_bs_real -> $_bs_bak" \
+      || bs_warn "  could not back up $_bs_real; appending anyway"
+  fi
+  printf '\n# Added by ai-skills bootstrap\n%s\n' "$_bs_line" >> "$_bs_real"
+  bs_log "  added brew shellenv for $_bs_prefix to $_bs_real"
 }
 
 bs_ensure_brew() {
@@ -361,12 +395,29 @@ bs_ensure_zsh_default() {
   bs_log "  login shell set to $_bs_target (takes effect on next login)"
 }
 
+# Neither dscl nor getent is guaranteed: dscl is macOS-only, and getent is
+# absent on minimal Linux images and stripped containers. Falling through to
+# empty made bs_ensure_zsh_default unable to tell "already zsh" from "not zsh",
+# so it proposed a chsh regardless. Try each, then read /etc/passwd directly
+# (POSIX, and present wherever accounts are), then $SHELL as a last resort.
 bs_current_login_shell() {
+  _bs_user="$(id -un)"
   if [ "$(uname -s)" = "Darwin" ] && bs_have dscl; then
-    dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}'
-  else
-    getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7
+    _bs_sh="$(dscl . -read "/Users/$_bs_user" UserShell 2>/dev/null | awk '{print $2}')"
+    [ -n "$_bs_sh" ] && { echo "$_bs_sh"; return 0; }
   fi
+  if bs_have getent; then
+    _bs_sh="$(getent passwd "$_bs_user" 2>/dev/null | cut -d: -f7)"
+    [ -n "$_bs_sh" ] && { echo "$_bs_sh"; return 0; }
+  fi
+  if [ -r /etc/passwd ]; then
+    _bs_sh="$(awk -F: -v u="$_bs_user" '$1 == u { print $7; exit }' /etc/passwd 2>/dev/null)"
+    [ -n "$_bs_sh" ] && { echo "$_bs_sh"; return 0; }
+  fi
+  # Last resort: the CURRENT shell, which is not necessarily the login shell but
+  # beats reporting nothing.
+  [ -n "${SHELL:-}" ] && { echo "$SHELL"; return 0; }
+  return 1
 }
 
 # chsh refuses a shell that is not in /etc/shells.
@@ -439,6 +490,10 @@ bs_ensure_bash() {
 # Full bootstrap, in dependency order: brew is the package manager that the
 # zsh and bash installs depend on, so it goes first.
 bs_bootstrap() {
+  # Before ANY detection or install. Root is not a supported mode.
+  if command -v refuse_if_root >/dev/null 2>&1; then
+    refuse_if_root || return 1
+  fi
   bs_detect_os
   bs_detect_pkg_mgr
   bs_log "os=$BS_OS pkg-manager=${BS_PKG_MGR:-none}"
@@ -446,7 +501,17 @@ bs_bootstrap() {
   # needs no root at all, and refusing there would be wrong.
   bs_check_sudo || bs_warn "  continuing; steps that need root will say so when they fail"
   _bs_rc=0
-  bs_ensure_brew || _bs_rc=1
+  # On macOS brew is a HARD prerequisite: installing zsh, installing a modern
+  # bash and every later package all go through it. Continuing produced a
+  # cascade of three more predictable failures instead of one clear one.
+  if ! bs_ensure_brew; then
+    if [ "$BS_OS" = "mac" ]; then
+      bs_warn "  brew is required on macOS and is not available; stopping here"
+      bs_warn "  rather than reporting three more failures that all follow from it."
+      return 1
+    fi
+    _bs_rc=1
+  fi
   bs_detect_pkg_mgr
   bs_ensure_zsh  || _bs_rc=1
   bs_ensure_bash || _bs_rc=1
@@ -459,6 +524,12 @@ bs_exec_bash() {
   _bs_script="$1"
   shift
   [ -f "$_bs_script" ] || { bs_die "no such script: $_bs_script"; return 1; }
+  # BEFORE bs_ensure_brew/bs_ensure_bash below, which INSTALL things. Previously
+  # the guard lived only in the re-exec'd script, so `sudo ai-setup --yes` would
+  # install Homebrew and write root's .zprofile and only then refuse.
+  if command -v refuse_if_root >/dev/null 2>&1; then
+    refuse_if_root || return 1
+  fi
   if ! BS_BASH="$(bs_find_bash)"; then
     bs_detect_os
     bs_detect_pkg_mgr

@@ -7,6 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../ai-setup/lib/ai-tools.sh"
 source "$SCRIPT_DIR/../../../lib/spec_builder.sh"
 source "$SCRIPT_DIR/../../../lib/report-check.sh"
+source "$SCRIPT_DIR/../../../lib/fs-helpers.sh"
+
+# Never as root. Lower stakes than the other entry points -- this writes reports
+# to the working directory rather than reconfiguring $HOME -- but root-owned
+# files scattered through the repo are a real nuisance, and "never as root" is
+# the policy for the tool, not for two thirds of it.
+refuse_if_root || exit 1
 
 CALLER="${CALLING_AGENT:-}"
 OPPONENT=""
@@ -347,9 +354,18 @@ EOF
 printf '%s\n\n' "$ROAST" >> "$PROMPT_FILE"
 
 cat << 'EOF' >> "$PROMPT_FILE"
+[HOW TO WORK — READ THIS FIRST]
+You are running HEADLESS with NO TOOL ACCESS. Every file-read, shell, search or
+command tool call will be auto-denied, and you cannot be prompted for approval.
+Do NOT attempt any tool call. Do NOT stop to ask for permission. Everything you
+need is inlined below: the complete specification and the complete diff. Review
+from that text alone and emit your findings directly as your response.
+Producing no output because a tool was denied is a FAILED review.
+
 [INDEPENDENT REVIEW DIRECTIVES]
 1. DO NOT ASSUME CORRECTNESS. Act as a hostile external inspector looking for defects.
-2. INDEPENDENT SPEC DERIVATION: Derive the expected behavior strictly from the attached specification/ticket. Do not trust code comments or PR narratives.
+2. INDEPENDENT SPEC DERIVATION: Derive the expected behavior strictly from the attached specification/ticket. Do not trust code comments or PR narratives — the diff's own comments and commit messages are the author's CLAIMS, not evidence.
+2b. If the specification marks any requirement as builder-authored or UNVERIFIED, treat it as an unproven claim: establish from the diff both that the defect was real AND that the fix is correct and complete.
 3. ATTACK THE IMPLEMENTATION:
    - Business Invariant Violations: Where does this code violate domain rules or contradict other subsystems?
    - Concurrency & Distributed Edge Cases: What breaks during out-of-order retries, race conditions, or partial timeouts?

@@ -146,22 +146,67 @@ assert "  and it does NOT offer to do that itself" \
 out="$(root_probe "FS_ALLOW_ROOT=1; export FS_ALLOW_ROOT;")"
 assert "FS_ALLOW_ROOT=1 overrides, for containers" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
 
-echo "== the entry points enforce it =="
-MS="$SCRIPT_DIR/../../skills/machine-setup/scripts/machine-setup"
-AS="$SCRIPT_DIR/../../skills/ai-setup/scripts/ai-setup.sh"
-grep -q 'refuse_if_root || exit 1' "$MS"; assert "machine-setup calls the guard" $?
-grep -q 'refuse_if_root || exit 1' "$AS"; assert "ai-setup calls the guard" $?
-# It must run BEFORE anything is inspected or changed.
-gline=$(grep -n 'refuse_if_root' "$MS" | head -1 | cut -d: -f1)
-wline=$(grep -n 'bs_bootstrap' "$MS" | head -1 | cut -d: -f1)
-assert "  and machine-setup guards before bootstrapping ($gline < $wline)" \
-  $([[ "$gline" -lt "$wline" ]] && echo 0 || echo 1)
-# The old sudo-only name must be gone from PRODUCTION code, or a stale call
-# silently guards nothing. Excluding lib/tests: this assertion names the symbol
-# it is searching for, and would otherwise match itself.
-stale=$(grep -rl 'refuse_if_sudo' "$SCRIPT_DIR/../.." --include='*.sh' --include='*.zsh' 2>/dev/null \
-        | grep -v '/lib/tests/' | wc -l | tr -d ' ')
-check "no stale refuse_if_sudo in production code" 0 "$stale"
+echo "== EVERY entry point refuses root, behaviourally =="
+# The previous version of this block grepped two files I happened to pick -- the
+# machine-setup script and the INNER ai-setup.sh -- and passed while the actual
+# documented entry points, the #!/bin/sh wrappers, were wide open. An ai-battle
+# challenger found the P0 this test was supposed to cover.
+#
+# So: discover the entry points from the repo, and RUN each one with a stubbed
+# euid instead of grepping for a symbol. A behavioural check cannot miss a file,
+# and cannot be satisfied by a guard that fires too late.
+STUBBIN="$W/stubbin"
+mkdir -p "$STUBBIN"
+cat > "$STUBBIN/id" <<'IDSTUB'
+#!/bin/sh
+case "$1" in
+  -u)  echo 0 ;;
+  -un) echo root ;;
+  *)   echo 0 ;;
+esac
+IDSTUB
+chmod +x "$STUBBIN/id"
+
+REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
+mapfile -t ENTRY_POINTS < <(cd "$REPO" && git ls-files 'skills/*/scripts/*' | while read -r f; do
+  [ -x "$f" ] || continue
+  case "$(head -1 "$f")" in \#!*) echo "$f" ;; esac
+done)
+assert "found entry points to check (${#ENTRY_POINTS[@]})" $([[ ${#ENTRY_POINTS[@]} -ge 3 ]] && echo 0 || echo 1)
+
+for ep in "${ENTRY_POINTS[@]}"; do
+  # A run that would otherwise do work: --dry-run where supported, else a
+  # read-only subcommand. Either way it must refuse before doing anything.
+  case "$ep" in
+    *machine-setup)   args=(--dry-run --no-clis --no-repos) ;;
+    *ai-setup|*ai-setup.sh) args=(inventory) ;;
+    *ai-battle|*battle_runner.sh) args=(--list-tools) ;;
+    *) args=() ;;
+  esac
+  out="$(cd "$REPO" && PATH="$STUBBIN:$PATH" SUDO_USER=rallycenter "./$ep" "${args[@]}" < /dev/null 2>&1)"; rc=$?
+  assert "$(basename "$ep") refuses when euid is 0 (rc=$rc)" \
+    $([[ "$rc" -ne 0 ]] && grep -qi 'refusing to run' <<<"$out" && echo 0 || echo 1)
+done
+
+echo "== and refuses BEFORE installing anything =="
+# The P0: bs_exec_bash called bs_ensure_brew/bs_ensure_bash -- which install --
+# and only then exec'd the inner script where the guard lived. So
+# `sudo ai-setup --yes inventory` on a fresh Mac installed Homebrew and wrote
+# root's .zprofile, then refused.
+out="$(cd "$REPO" && PATH="$STUBBIN:$PATH" SUDO_USER=rallycenter \
+  BS_BASH_SEARCH=/nonexistent/bash BS_ASSUME_YES=1 \
+  ./skills/ai-setup/scripts/ai-setup --yes inventory < /dev/null 2>&1)"
+assert "no brew install is attempted before the refusal" \
+  $(! grep -qiE 'Install Homebrew|brew: NOT installed|installing bash' <<<"$out" && echo 0 || echo 1)
+assert "  and no shellenv line is written" $(! grep -q 'brew shellenv' <<<"$out" && echo 0 || echo 1)
+assert "  the refusal is the first thing it says" \
+  $(grep -qi 'refusing to run' <<<"$(head -3 <<<"$out")" && echo 0 || echo 1)
+
+# Control: the same command WITHOUT the stubbed euid must get past the guard,
+# or these assertions would pass against a script that refuses everything.
+out="$(cd "$REPO" && ./skills/ai-setup/scripts/ai-setup inventory < /dev/null 2>&1)"
+assert "(control) a non-root run is not refused" \
+  $(! grep -qi 'refusing to run' <<<"$out" && echo 0 || echo 1)
 
 echo "== logging goes to stderr, never into the returned path =="
 # backup_path prints the backup location on stdout; a log line mixed in would

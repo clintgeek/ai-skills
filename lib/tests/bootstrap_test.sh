@@ -189,6 +189,69 @@ assert "  and the login shell is unchanged afterwards" \
   $([[ "$(bs 'bs_current_login_shell')" == "$login_now" ]] && echo 0 || echo 1)
 assert "  and no chsh was actually executed" $(! grep -qE '^\s*\+ sudo chsh' <<<"$out" && echo 0 || echo 1)
 
+echo "== brew shellenv persistence =="
+# Two findings from the full-branch battle: the file was edited in place with no
+# backup (and a dotfiles setup usually makes ~/.zprofile a symlink INTO the
+# repo), and the idempotency check was a substring match.
+ZP="$WORK/zphome"; mkdir -p "$ZP"
+PFX="$(bs 'bs_brew_prefix')"
+LINE="eval \"\$($PFX/bin/brew shellenv)\""
+
+# A comment mentioning "brew shellenv" must NOT suppress the real append.
+printf '# a comment mentioning brew shellenv\n' > "$ZP/.zprofile"
+out="$(HOME="$ZP" bs 'bs_brew_persist')"
+assert "a comment mentioning it does not suppress the append" \
+  $(grep -q 'added brew shellenv' <<<"$out" && echo 0 || echo 1)
+assert "  and the real line is now present" $(grep -qxF "$LINE" "$ZP/.zprofile" && echo 0 || echo 1)
+
+# The exact line present -> skip.
+out="$(HOME="$ZP" bs 'bs_brew_persist')"
+assert "the exact line present is recognized and skipped" \
+  $(grep -q 'already in' <<<"$out" && echo 0 || echo 1)
+check "  and it is not appended twice" 1 "$(grep -cxF "$LINE" "$ZP/.zprofile")"
+
+# A line for a DIFFERENT prefix must not count as ours.
+printf 'eval "$(/usr/local/bin/brew shellenv)"\n' > "$ZP/.zprofile"
+out="$(HOME="$ZP" bs 'bs_brew_persist')"
+assert "a different brew prefix does not count as already-present" \
+  $(grep -q 'added brew shellenv' <<<"$out" && echo 0 || echo 1)
+
+echo "== and a symlinked .zprofile is named and backed up, not silently rewritten =="
+ZS="$WORK/zshome"; mkdir -p "$ZS/dotfiles"
+printf 'export FOO=1\n' > "$ZS/dotfiles/.zprofile"
+ln -s "$ZS/dotfiles/.zprofile" "$ZS/.zprofile"
+out="$(HOME="$ZS" bs 'bs_brew_persist')"
+assert "it says the target is a symlink and names the real file" \
+  $(grep -q 'is a symlink; the line goes into' <<<"$out" && echo 0 || echo 1)
+assert "  backs the real file up before appending" \
+  $([[ -n "$(find "$ZS/dotfiles" -name '.zprofile.bak-*' 2>/dev/null)" ]] && echo 0 || echo 1)
+assert "  the backup still holds the ORIGINAL content" \
+  $(grep -q 'export FOO=1' "$(find "$ZS/dotfiles" -name '.zprofile.bak-*' | head -1)" && echo 0 || echo 1)
+assert "  and the symlink itself is left intact (not replaced by a file)" \
+  $([[ -L "$ZS/.zprofile" ]] && echo 0 || echo 1)
+
+echo "== login shell is readable without getent or dscl =="
+# Neither is guaranteed: dscl is macOS-only, getent is absent on minimal images.
+# Returning empty made bs_ensure_zsh_default unable to tell "already zsh" from
+# "not zsh", so it proposed a chsh regardless.
+out="$(bs 'bs_have() { [ "$1" != dscl ] && [ "$1" != getent ]; }; bs_current_login_shell')"
+assert "falls back to /etc/passwd when dscl and getent are missing (got '$out')" \
+  $([[ -n "$out" ]] && echo 0 || echo 1)
+out="$(bs 'bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell')"
+assert "  and to \$SHELL when even /etc/passwd is unreadable (got '$out')" \
+  $([[ -n "$out" ]] && echo 0 || echo 1)
+
+echo "== brew is a hard prerequisite on macOS: no cascade =="
+# It used to set _bs_rc=1 and carry on through zsh, bash and chsh, producing
+# three more predictable failures after the one that mattered.
+out="$(bs 'bs_ensure_brew() { return 1; }; BS_OS=mac; bs_bootstrap; echo rc=$?')"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  assert "a failed brew stops the bootstrap on macOS" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+  assert "  saying why rather than cascading" $(grep -q 'stopping here' <<<"$out" && echo 0 || echo 1)
+  assert "  and does not go on to try zsh/bash/chsh" \
+    $(! grep -qE '^\[bootstrap\] (zsh|bash|login shell):' <<<"$out" && echo 0 || echo 1)
+fi
+
 echo "== login shell =="
 out="$(bs 'bs_current_login_shell')"
 assert "reads the current login shell (got '$out')" $([[ -n "$out" ]] && echo 0 || echo 1)

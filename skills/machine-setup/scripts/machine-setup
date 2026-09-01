@@ -96,8 +96,15 @@ setup_repos() {
     rpath=$(grep -E "^REPO_PATH\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
     rurl=$(grep -E "^REPO_URL\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
     rpost=$(grep -E "^REPO_POST_CLONE\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
-    # Expand $HOME written literally in the config.
-    rpath=$(eval "echo \"$rpath\"")
+    # Expand a literal $HOME or ~ WITHOUT eval. This used to be
+    # `eval "echo \"$rpath\""`, which executes command substitution embedded in a
+    # path value. repos.conf is committed data the owner controls, but a data
+    # file should not need an eval to read, and the expansion it actually needs
+    # is two cases wide.
+    case "$rpath" in
+      '$HOME'/*|'$HOME') rpath="$HOME${rpath#\$HOME}" ;;
+      '~'/*|'~')         rpath="$HOME${rpath#\~}" ;;
+    esac
     [ -z "$rpath" ] && continue
 
     if [ "$rpath" = "$REPO_ROOT" ]; then
@@ -119,6 +126,10 @@ setup_repos() {
     if [ -n "$DRY_RUN" ]; then continue; fi
     if git clone "$rurl" "$rpath"; then
       if [ -n "$rpost" ]; then
+        # eval is the POINT here: REPO_POST_CLONE is a hook, declared in a
+        # committed file by the repo owner, and running it is what it is for.
+        # Same trust level as the install commands elsewhere. Logged before it
+        # runs so it is never a surprise.
         log "    post-clone: $rpost"
         ( cd "$rpath" && eval "$rpost" ) || log "    post-clone failed"
       fi
