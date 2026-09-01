@@ -60,7 +60,23 @@ Options:
 ~/.ai/skills/machine-setup/scripts/machine-setup --dry-run
 ```
 
-**Prerequisite: `git`.** You cloned this repo, so you have it.
+**Prerequisites**
+
+- **`git`** — you cloned this repo, so you have it.
+- **A non-root user with sudo.** This is never run as root, and it refuses to be.
+  Everything it does configures the *invoking user's* account: `~/.ai`, the tool
+  symlinks under `$HOME`, the login shell, `~/.zprofile`. As root all of that
+  lands on root's account instead, silently and plausibly.
+
+  If a provider hands you a box where root is the only account, setting it up
+  properly is **the operator's job, done by hand, before running this**: create a
+  non-root user with key-only access and no password, grant it sudo, disable root
+  login. The tool does not do that for you and should not — closing off root
+  login is a decision about a machine's security posture, not a side effect of
+  installing zsh.
+
+  `FS_ALLOW_ROOT=1` overrides, for a container or image build where root really
+  is the only user that will ever exist.
 
 ## 3. After the bootstrap: set the machine up by talking
 

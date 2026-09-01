@@ -114,38 +114,54 @@ out="$(fs "ensure_dir '$W/home/a/b/c'; echo rc=\$?")"
 assert "  is idempotent and silent on an existing dir" \
   $(grep -q 'rc=0' <<<"$out" && ! grep -q 'created' <<<"$out" && echo 0 || echo 1)
 
-echo "== refuse_if_sudo: never configure the wrong user's account =="
-# The username varies per machine (ccrocker / crocker / rallycenter), so
-# everything derives from $HOME and `id -un`. Under sudo BOTH become root's, so
-# the repo, the symlinks, the login shell and .zprofile all land on root --
-# silently, and reporting success. `sudo ./machine-setup` is a natural thing to
-# type because it does install packages.
-out="$(/bin/sh -c ". '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
-assert "a normal run is unaffected" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+echo "== refuse_if_root: root is not a supported mode =="
+# OWNER POLICY, stated emphatically: this tool is never run as root -- not via
+# sudo, not logged in as root. If root is the only account, creating a non-root
+# user and disabling root login is the OPERATOR's first step, by hand. The tool
+# does not do it and must not pretend it is fine to proceed without it.
+#
+# id() is stubbed BEFORE sourcing, since the guard reads the euid when called.
+root_probe() { # root_probe <extra-env>
+  /bin/sh -c "id() { echo 0; }; $1 . '$FS'; refuse_if_root; echo rc=\$?" 2>&1
+}
 
-out="$(/bin/sh -c "SUDO_USER=rallycenter; export SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+out="$(/bin/sh -c ". '$FS'; refuse_if_root; echo rc=\$?" 2>&1)"
+assert "a normal non-root run is unaffected" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
+out="$(root_probe "SUDO_USER=rallycenter; export SUDO_USER;")"
 assert "sudo from a real user is refused" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
-assert "  and the message names that user, not a generic warning" \
-  $(grep -q 'rallycenter' <<<"$out" && echo 0 || echo 1)
-assert "  and says how to run it correctly" $(grep -q 'sudo -u rallycenter' <<<"$out" && echo 0 || echo 1)
+assert "  naming that user, not a generic warning" $(grep -q 'rallycenter' <<<"$out" && echo 0 || echo 1)
+assert "  and saying it escalates by itself" $(grep -q 'escalates by itself' <<<"$out" && echo 0 || echo 1)
 
-# Being root is not itself wrong: on many VPSes root is simply who you are.
-out="$(/bin/sh -c "unset SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
-assert "genuinely being root (no SUDO_USER) is allowed" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
-out="$(/bin/sh -c "SUDO_USER=root; export SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
-assert "  as is SUDO_USER=root" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
-out="$(/bin/sh -c "SUDO_USER=rallycenter FS_ALLOW_SUDO=1; export SUDO_USER FS_ALLOW_SUDO; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
-assert "  and FS_ALLOW_SUDO=1 overrides deliberately" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+# The case that used to be ALLOWED and is now refused: logged in as root.
+out="$(root_probe "unset SUDO_USER;")"
+assert "being logged in as root is ALSO refused" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+assert "  telling the operator to make a non-root user first" \
+  $(grep -q 'create a non-root user' <<<"$out" && echo 0 || echo 1)
+assert "  key-only, no password, sudo, root login disabled" \
+  $(grep -q 'key-only' <<<"$out" && grep -q 'disable root login' <<<"$out" && echo 0 || echo 1)
+assert "  and it does NOT offer to do that itself" \
+  $(grep -qi "operator's job, not this tool" <<<"$out" && echo 0 || echo 1)
 
-echo "== the entry points actually enforce it =="
+out="$(root_probe "FS_ALLOW_ROOT=1; export FS_ALLOW_ROOT;")"
+assert "FS_ALLOW_ROOT=1 overrides, for containers" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
+echo "== the entry points enforce it =="
 MS="$SCRIPT_DIR/../../skills/machine-setup/scripts/machine-setup"
 AS="$SCRIPT_DIR/../../skills/ai-setup/scripts/ai-setup.sh"
-SUDO_USER=rallycenter HOME="$W/fakeroot" "$MS" --dry-run --no-clis < /dev/null >/dev/null 2>&1; rc=$?
-check "machine-setup exits non-zero under sudo" 1 "$rc"
-SUDO_USER=rallycenter HOME="$W/fakeroot" "$AS" inventory >/dev/null 2>&1; rc=$?
-check "ai-setup exits non-zero under sudo" 1 "$rc"
-assert "  and neither created anything in the fake root home" \
-  $([[ ! -e "$W/fakeroot" ]] && echo 0 || echo 1)
+grep -q 'refuse_if_root || exit 1' "$MS"; assert "machine-setup calls the guard" $?
+grep -q 'refuse_if_root || exit 1' "$AS"; assert "ai-setup calls the guard" $?
+# It must run BEFORE anything is inspected or changed.
+gline=$(grep -n 'refuse_if_root' "$MS" | head -1 | cut -d: -f1)
+wline=$(grep -n 'bs_bootstrap' "$MS" | head -1 | cut -d: -f1)
+assert "  and machine-setup guards before bootstrapping ($gline < $wline)" \
+  $([[ "$gline" -lt "$wline" ]] && echo 0 || echo 1)
+# The old sudo-only name must be gone from PRODUCTION code, or a stale call
+# silently guards nothing. Excluding lib/tests: this assertion names the symbol
+# it is searching for, and would otherwise match itself.
+stale=$(grep -rl 'refuse_if_sudo' "$SCRIPT_DIR/../.." --include='*.sh' --include='*.zsh' 2>/dev/null \
+        | grep -v '/lib/tests/' | wc -l | tr -d ' ')
+check "no stale refuse_if_sudo in production code" 0 "$stale"
 
 echo "== logging goes to stderr, never into the returned path =="
 # backup_path prints the backup location on stdout; a log line mixed in would

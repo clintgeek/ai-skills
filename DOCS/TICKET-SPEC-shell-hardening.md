@@ -114,10 +114,16 @@ correct and complete — from the code, not from these statements.
 5. **The challenger in ai-battle stays read-only.** No change may loosen a tools
    permission mode, sandbox, or dry-run flag.
 6. **No username or home-layout assumptions.** No hardcoded `/Users/<name>`; `$HOME`
-   and `id -un` throughout. And because both of those become root's under `sudo`, the
-   entry points refuse to run that way rather than configuring the wrong account --
-   being genuinely root is fine, escalating from a real user is not.
-7. **Tests must fail when the code is wrong.** Any test that cannot fail is a defect.
+   and `id -un` throughout.
+7. **Never run as root.** OWNER POLICY, stated emphatically: not via `sudo`, not logged
+   in as root. Both become root's `$HOME` and `id -un`, so the repo, symlinks, login
+   shell and `.zprofile` all land on the wrong account -- silently, and reporting
+   success. Where root is the only account, creating a non-root user with key-only
+   access and disabling root login is the OPERATOR's first step, by hand; the tool must
+   not attempt it. `FS_ALLOW_ROOT=1` is the container escape hatch.
+   *(An earlier draft allowed "genuinely root" as legitimate. That was the builder's
+   inference and it was wrong.)*
+8. **Tests must fail when the code is wrong.** Any test that cannot fail is a defect.
    *(BUILDER-PROPOSED, accepted by the owner -- not something they asked for. Added after
    the builder caught itself writing unfalsifiable assertions, then did it three more
    times: a `$?` captured after a command substitution, a grep matching its own
