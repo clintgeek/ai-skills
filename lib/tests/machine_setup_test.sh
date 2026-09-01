@@ -130,8 +130,15 @@ echo "== repos.conf paths expand without eval =="
 assert "no eval-based path expansion remains" $?
 
 out="$("$MS" --dry-run --no-clis < /dev/null 2>&1)"
-assert "\$HOME in repos.conf still resolves to a real path" \
-  $(grep -qF "$HOME" <<<"$out" && echo 0 || echo 1)
+# NOT `grep -qF "$HOME"`: a corrupted path like /Users/you$HOME/dotfiles ALSO
+# contains $HOME, so that assertion could not tell correct from corrupt. An
+# ai-battle challenger flagged exactly this. Assert the EXACT expected path.
+rc=$(grep -qF "$HOME/dotfiles" <<<"$out" && echo 0 || echo 1)
+assert "\$HOME in repos.conf resolves to exactly \$HOME/dotfiles" "$rc"
+# Control: the corrupted form must be ABSENT, so finding it is the failure.
+# (First version had this inverted -- it passed when the corruption WAS there.)
+ctl=$(grep -qF "$HOME\$HOME" <<<"$out" && echo 1 || echo 0)
+assert "  and no doubled-\$HOME corruption appears" "$ctl"
 
 # The point of dropping eval: a command substitution in a path value must be
 # treated as literal text, never executed.

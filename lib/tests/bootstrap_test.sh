@@ -189,6 +189,41 @@ assert "  and the login shell is unchanged afterwards" \
   $([[ "$(bs 'bs_current_login_shell')" == "$login_now" ]] && echo 0 || echo 1)
 assert "  and no chsh was actually executed" $(! grep -qE '^\s*\+ sudo chsh' <<<"$out" && echo 0 || echo 1)
 
+echo "== the root guard is unconditional =="
+# It used to be `if command -v refuse_if_root; then refuse_if_root; fi`, which
+# silently skipped the check whenever fs-helpers.sh had not been sourced -- i.e.
+# whenever REPO_ROOT was unset. A guard protecting an invariant must not depend
+# on whether a helper happened to load.
+out="$(/bin/sh -c "id() { echo 0; }; unset REPO_ROOT; . '$BS'; bs_bootstrap >/dev/null 2>&1; echo rc=\$?")"
+assert "bs_bootstrap refuses root with REPO_ROOT unset" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+out="$(/bin/sh -c "id() { echo 0; }; unset REPO_ROOT; . '$BS'; bs_exec_bash /dev/null >/dev/null 2>&1; echo rc=\$?")"
+assert "bs_exec_bash refuses root with REPO_ROOT unset" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+out="$(/bin/sh -c "id() { echo 0; }; unset REPO_ROOT; . '$BS'; bs_refuse_root 2>&1")"
+assert "  and still explains itself without fs-helpers" \
+  $(grep -qi 'refusing to run as root' <<<"$out" && echo 0 || echo 1)
+# Control: a non-root run must get through, or the above passes trivially.
+out="$(/bin/sh -c "unset REPO_ROOT; . '$BS'; bs_refuse_root; echo rc=\$?")"
+assert "  (control) a non-root run is not refused" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
+BANNED="map""file"   # never spelled literally: this file scans itself
+echo "== no suite uses \$BANNED ($BANNED) =="
+# bash 4+. Under macOS's bash 3.2 it yields an EMPTY array and whatever loop
+# depended on it is silently skipped -- which is how a behavioural guard shipped
+# doing nothing. read_lines_into (lib/tests/assert.sh) is the replacement.
+bad=""
+for f in "$SCRIPT_DIR"/*.sh; do
+  case "$(basename "$f")" in assert.sh) continue ;; esac
+  # Comments AND single-quoted spans: the banned word appears in this very
+  # check's own pattern string, which comment-stripping alone does not remove.
+  sed -e 's/[[:space:]]*#.*$//' -e "s/'[^']*'/''/g" "$f" \
+    | grep -q "$BANNED" && bad="$bad $(basename "$f")"
+done
+check "no test suite uses \$BANNED" "" "$bad"
+# Control: the check must actually detect the thing it bans.
+printf '%s -t X < <(echo a)\n' "$BANNED" > "$WORK/banned_probe.sh"
+sed -e 's/[[:space:]]*#.*$//' -e "s/'[^']*'/''/g" "$WORK/banned_probe.sh" | grep -q "$BANNED"
+assert "  (control) the ban detects a real usage" $?
+
 echo "== brew shellenv persistence =="
 # Two findings from the full-branch battle: the file was edited in place with no
 # backup (and a dotfiles setup usually makes ~/.zprofile a symlink INTO the
@@ -235,16 +270,52 @@ assert "  the backup still holds the ORIGINAL content" \
 assert "  and the symlink itself is left intact (not replaced by a file)" \
   $([[ -L "$ZS/.zprofile" ]] && echo 0 || echo 1)
 
+# A RELATIVE symlink, with fs-helpers deliberately out of scope so the readlink
+# fallback runs. readlink returns the target verbatim, so appending to it wrote
+# relative to the CURRENT DIRECTORY while reporting success.
+ZR="$WORK/zrel"; mkdir -p "$ZR/dotfiles"
+printf 'export BAR=1\n' > "$ZR/dotfiles/.zprofile"
+( cd "$ZR" && ln -s "dotfiles/.zprofile" .zprofile )
+CANARY="$WORK/canary-cwd"; mkdir -p "$CANARY/dotfiles"
+out="$(cd "$CANARY" && HOME="$ZR" /bin/sh -c "unset REPO_ROOT; . '$BS'; bs_brew_persist" 2>&1)"
+assert "a RELATIVE symlink resolves against the link's own directory" \
+  $(grep -qF "$ZR/dotfiles/.zprofile" <<<"$out" && echo 0 || echo 1)
+assert "  the line lands in the real dotfile" \
+  $(grep -q 'brew shellenv' "$ZR/dotfiles/.zprofile" && echo 0 || echo 1)
+assert "  and NOT relative to the current directory" \
+  $([[ ! -e "$CANARY/dotfiles/.zprofile" ]] && echo 0 || echo 1)
+
+# Quoting variations must not append a duplicate on every run.
+ZV="$WORK/zvar"; mkdir -p "$ZV"
+printf 'eval $(%s/bin/brew shellenv)\n' "$PFX" > "$ZV/.zprofile"
+out="$(HOME="$ZV" bs 'bs_brew_persist')"
+assert "an unquoted eval variant counts as already-present" \
+  $(grep -q 'already in' <<<"$out" && echo 0 || echo 1)
+check "  and nothing is appended" 1 "$(wc -l < "$ZV/.zprofile" | tr -d ' ')"
+# Control: a COMMENT mentioning it must still not count.
+printf '# eval "$(%s/bin/brew shellenv)"\n' "$PFX" > "$ZV/.zprofile"
+out="$(HOME="$ZV" bs 'bs_brew_persist')"
+assert "  (control) a comment still does not count as present" \
+  $(grep -q 'added brew shellenv' <<<"$out" && echo 0 || echo 1)
+
 echo "== login shell is readable without getent or dscl =="
 # Neither is guaranteed: dscl is macOS-only, getent is absent on minimal images.
 # Returning empty made bs_ensure_zsh_default unable to tell "already zsh" from
 # "not zsh", so it proposed a chsh regardless.
-out="$(bs 'bs_have() { [ "$1" != dscl ] && [ "$1" != getent ]; }; bs_current_login_shell')"
+# stdout ONLY: bs_current_login_shell prints the shell on stdout and warns on
+# stderr, and production callers use "$(...)" which captures only stdout. The
+# suite's bs() helper merges the two, which would fold the warning into the value.
+lsh() { /bin/sh -c ". '$BS'; $1" 2>/dev/null; }
+out="$(lsh 'bs_have() { [ "$1" != dscl ] && [ "$1" != getent ]; }; bs_current_login_shell')"
 assert "falls back to /etc/passwd when dscl and getent are missing (got '$out')" \
-  $([[ -n "$out" ]] && echo 0 || echo 1)
-out="$(bs 'bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell')"
+  $([[ -n "$out" && "$out" == /* ]] && echo 0 || echo 1)
+out="$(lsh 'bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell')"
 assert "  and to \$SHELL when even /etc/passwd is unreadable (got '$out')" \
-  $([[ -n "$out" ]] && echo 0 || echo 1)
+  $([[ "$out" == "/bin/zsh" ]] && echo 0 || echo 1)
+# The $SHELL fallback is a guess, so it must SAY so on stderr.
+warn="$(/bin/sh -c ". '$BS'; bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell >/dev/null" 2>&1)"
+assert "  and warns that \$SHELL may not be the login shell" \
+  $(grep -qi 'may not be the login shell' <<<"$warn" && echo 0 || echo 1)
 
 echo "== brew is a hard prerequisite on macOS: no cascade =="
 # It used to set _bs_rc=1 and carry on through zsh, bash and chsh, producing

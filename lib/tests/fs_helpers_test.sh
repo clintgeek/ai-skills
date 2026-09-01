@@ -11,9 +11,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FS="$SCRIPT_DIR/../fs-helpers.sh"
 
-PASS=0 FAIL=0
-check() { if [[ "$2" == "$3" ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1 (expected '$2', got '$3')" >&2; fi }
-assert() { if [[ "$2" -eq 0 ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1" >&2; fi }
+# Shared helpers: assert/check/check_control/code_of/read_lines_into.
+# See lib/tests/assert.sh for why the control convention exists.
+source "$SCRIPT_DIR/assert.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/fs_helpers_test.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
@@ -168,11 +168,22 @@ IDSTUB
 chmod +x "$STUBBIN/id"
 
 REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
-mapfile -t ENTRY_POINTS < <(cd "$REPO" && git ls-files 'skills/*/scripts/*' | while read -r f; do
+read_lines_into ENTRY_POINTS < <(cd "$REPO" && git ls-files 'skills/*/scripts/*' | while read -r f; do
   [ -x "$f" ] || continue
   case "$(head -1 "$f")" in \#!*) echo "$f" ;; esac
 done)
-assert "found entry points to check (${#ENTRY_POINTS[@]})" $([[ ${#ENTRY_POINTS[@]} -ge 3 ]] && echo 0 || echo 1)
+rc=$([[ ${#ENTRY_POINTS[@]} -ge 3 ]] && echo 0 || echo 1)
+assert "found entry points to check (${#ENTRY_POINTS[@]})" "$rc"
+# Name them explicitly: a discovery loop that silently finds nothing is exactly
+# how the mapfile bug hid, and "0 >= 3 is false" is only caught if someone reads
+# the count. Assert the ones that MUST be there.
+for must in machine-setup ai-setup ai-battle; do
+  found=1
+  for ep in "${ENTRY_POINTS[@]}"; do
+    [[ "$(basename "$ep")" == "$must" ]] && found=0
+  done
+  assert "  discovery found the $must entry point" "$found"
+done
 
 for ep in "${ENTRY_POINTS[@]}"; do
   # A run that would otherwise do work: --dry-run where supported, else a
@@ -219,6 +230,4 @@ out="$(/bin/sh -c ". '$FS'; ln -s /nowhere '$W/home/logprobe2'; backup_path '$W/
 assert "no caller log() means plain echo, not /usr/bin/log" \
   $(! grep -qi 'Unknown subcommand' <<<"$out" && echo 0 || echo 1)
 
-echo ""
-echo "$PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+report_and_exit

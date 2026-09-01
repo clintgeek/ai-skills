@@ -43,6 +43,25 @@ if [ -n "${REPO_ROOT:-}" ] && [ -f "$REPO_ROOT/lib/fs-helpers.sh" ]; then
   . "$REPO_ROOT/lib/fs-helpers.sh"
 fi
 
+# A guard protecting an invariant must NOT be conditional on a soft function
+# lookup. bs_bootstrap and bs_exec_bash used `command -v refuse_if_root` and
+# silently skipped the check when fs-helpers.sh had not been sourced -- which
+# happens whenever REPO_ROOT is unset. This always refuses; when fs-helpers IS
+# in scope it defers to it for the better message.
+bs_refuse_root() {
+  [ -n "${FS_ALLOW_ROOT:-}" ] && return 0
+  [ "$(id -u)" = "0" ] || return 0
+  if command -v refuse_if_root >/dev/null 2>&1; then
+    refuse_if_root
+    return $?
+  fi
+  bs_warn "Refusing to run as root."
+  bs_warn "  This configures a user's account and is not meant for root's."
+  bs_warn "  Create a non-root user with sudo and run it as them."
+  bs_warn "  FS_ALLOW_ROOT=1 overrides (containers and image builds only)."
+  return 1
+}
+
 BS_MIN_BASH_MAJOR=4
 BS_BASH=""          # set by bs_ensure_bash: path to a bash >= BS_MIN_BASH_MAJOR
 BS_ZSH=""           # set by bs_ensure_zsh: path to a usable zsh
@@ -228,14 +247,30 @@ bs_brew_persist() {
   # rather than silently dirtying someone's tracked dotfiles.
   _bs_real="$_bs_profile"
   if [ -L "$_bs_profile" ]; then
-    _bs_real="$(_fs_abs_link_target "$_bs_profile" 2>/dev/null || readlink "$_bs_profile")"
+    _bs_real="$(_fs_abs_link_target "$_bs_profile" 2>/dev/null)" || _bs_real=""
+    if [ -z "$_bs_real" ]; then
+      # fs-helpers may not be in scope. readlink returns the target VERBATIM,
+      # so a relative link (`~/.zprofile -> dotfiles/.zprofile`, which is what
+      # stow and most dotfile managers create) would otherwise be appended to
+      # relative to the CURRENT DIRECTORY -- reporting success while writing
+      # somewhere unrelated. Resolve it against the link's own directory.
+      _bs_real="$(readlink "$_bs_profile")"
+      case "$_bs_real" in
+        /*) ;;
+        *)  _bs_real="$(dirname "$_bs_profile")/$_bs_real" ;;
+      esac
+    fi
     bs_log "  note: $_bs_profile is a symlink; the line goes into $_bs_real"
   fi
 
-  # Exact-line match, not a substring. `grep -qF "brew shellenv"` also matched a
-  # COMMENT mentioning it, or a line for a DIFFERENT brew prefix, and then
-  # skipped the append the machine actually needed.
-  if [ -f "$_bs_real" ] && grep -qxF "$_bs_line" "$_bs_real" 2>/dev/null; then
+  # Match the PREFIX-SPECIFIC invocation, with comments stripped first.
+  # `grep -qF "brew shellenv"` was too loose (a comment mentioning it, or a line
+  # for a different prefix, suppressed the append). Exact-line matching was then
+  # too strict: `eval $(...)` without quotes, or trailing whitespace, appended a
+  # duplicate AND a .bak file on every single run. This handles both -- quoting
+  # variations match, a different prefix does not, and a comment cannot.
+  if [ -f "$_bs_real" ] \
+     && sed 's/#.*//' "$_bs_real" 2>/dev/null | grep -qF "$_bs_prefix/bin/brew shellenv"; then
     bs_log "  brew shellenv already in $_bs_real"
     return 0
   fi
@@ -414,9 +449,14 @@ bs_current_login_shell() {
     _bs_sh="$(awk -F: -v u="$_bs_user" '$1 == u { print $7; exit }' /etc/passwd 2>/dev/null)"
     [ -n "$_bs_sh" ] && { echo "$_bs_sh"; return 0; }
   fi
-  # Last resort: the CURRENT shell, which is not necessarily the login shell but
-  # beats reporting nothing.
-  [ -n "${SHELL:-}" ] && { echo "$SHELL"; return 0; }
+  # Last resort: $SHELL. It is the CURRENT shell, not necessarily the login
+  # shell, so say so -- acting on it could skip a chsh that was actually needed.
+  if [ -n "${SHELL:-}" ]; then
+    bs_warn "  could not read the login shell from the account database;"
+    bs_warn "  falling back to \$SHELL ($SHELL), which may not be the login shell."
+    echo "$SHELL"
+    return 0
+  fi
   return 1
 }
 
@@ -491,9 +531,7 @@ bs_ensure_bash() {
 # zsh and bash installs depend on, so it goes first.
 bs_bootstrap() {
   # Before ANY detection or install. Root is not a supported mode.
-  if command -v refuse_if_root >/dev/null 2>&1; then
-    refuse_if_root || return 1
-  fi
+  bs_refuse_root || return 1
   bs_detect_os
   bs_detect_pkg_mgr
   bs_log "os=$BS_OS pkg-manager=${BS_PKG_MGR:-none}"
@@ -527,9 +565,7 @@ bs_exec_bash() {
   # BEFORE bs_ensure_brew/bs_ensure_bash below, which INSTALL things. Previously
   # the guard lived only in the re-exec'd script, so `sudo ai-setup --yes` would
   # install Homebrew and write root's .zprofile and only then refuse.
-  if command -v refuse_if_root >/dev/null 2>&1; then
-    refuse_if_root || return 1
-  fi
+  bs_refuse_root || return 1
   if ! BS_BASH="$(bs_find_bash)"; then
     bs_detect_os
     bs_detect_pkg_mgr

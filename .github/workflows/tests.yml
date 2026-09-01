@@ -69,6 +69,13 @@ jobs:
           echo "definitions found: $n"
           [ "$n" -eq 2 ] || { echo "FAIL: expected one backup_path and one ensure_dir" >&2; exit 1; }
 
+      - name: assertion helpers are syntactically valid under bash 3.2 too
+        run: |
+          bash -n lib/tests/assert.sh
+          # The helpers exist because bash-4-only constructs silently no-op on
+          # macOS's bash 3.2; they must not themselves need bash 4.
+          if command -v bash3 >/dev/null 2>&1; then bash3 -n lib/tests/assert.sh; fi
+
       - name: fs-helpers suite
         run: ./lib/tests/fs_helpers_test.sh
 
