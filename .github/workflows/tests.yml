@@ -58,6 +58,9 @@ jobs:
       - name: spec_builder regression suite
         run: ./lib/tests/spec_builder_test.sh
 
+      - name: machine-setup suite
+        run: ./lib/tests/machine_setup_test.zsh
+
       - name: battle_runner smoke test
         run: ./skills/ai-battle/scripts/battle_runner.sh --list-tools
 
@@ -80,7 +83,9 @@ jobs:
           esac
 
       - name: machine-wizard dry-run
-        run: ./skills/machine-setup/scripts/machine-wizard.zsh --dry-run --repos-only < /dev/null
+        run: |
+          ./skills/machine-setup/scripts/machine-wizard.zsh --dry-run --repos-only < /dev/null
+          ./skills/machine-setup/scripts/machine-wizard.zsh --dry-run --role dev,admin --categories cli < /dev/null
 
       - name: Every skill dir has a SKILL.md with frontmatter
         run: |

@@ -22,7 +22,10 @@ The wizard at `skills/machine-setup/scripts/machine-wizard`:
 1. **Personal repos first** — clones or pulls the repos listed in `skills/machine-setup/repos.conf` (e.g. `~/.ai`, `~/dotfiles`). Runs any configured post-clone script (e.g. `dotfiles/install.sh`) after a fresh clone.
 2. **Interview** — asks the user what the machine is for and which categories of apps they want.
 3. **Recommends** — pre-selects a default checklist from `lib/app-catalog.zsh` based on role + categories.
-4. **Lets the user edit** — they can remove, add, or confirm the list.
+4. **Lets the user edit** — an interactive checklist where they can toggle
+   items on *and off* by number (so a mistaken removal is recoverable), add an
+   app id, a package name, or a raw install command with `+<text>`, `all` /
+   `none`, `list`, `help`, and `done`.
 5. **Installs** — runs the OS-appropriate install command for each selected app.
 6. **Reports** — prints what was installed, skipped, or failed.
 
@@ -38,11 +41,33 @@ Non-interactive / repeatable mode:
 
 ```bash
 ~/.ai/skills/machine-setup/scripts/machine-wizard \
-  --role dev \
+  --role dev,design \
   --categories terminal,productivity,security \
-  --extras zoom,notion \
+  --extras zoom,notion,neovim \
+  --extra-cmd 'brew tap foo/bar && brew install baz' \
   --yes
 ```
+
+**Roles** (`--role`, comma-separated, union): `dev`, `design`, `data`,
+`writing`, `gaming`, `admin`, `general`. Roles and categories are separate axes
+— a role is what the machine is *for*, a category is what *kind* of app it is —
+so `--role dev` and `--categories dev-tools` select different things.
+
+**Categories** (`--categories`, comma-separated): `cli`, `terminal`, `browser`,
+`productivity`, `security`, `media`, `dev-tools`, `cloud`, `communication`.
+
+**Extras** — two flags, because names and commands need different parsing:
+
+| Flag | For | Splitting |
+| :--- | :--- | :--- |
+| `--extras` | app ids and package names | comma-separated; repeatable |
+| `--extra-cmd` | one raw install command | never split; repeatable |
+
+An `--extras` entry that is not a catalog id is installed as a **package** via
+the local package manager, so custom app names are never silently dropped. An
+entry containing shell syntax or whitespace is run verbatim. Because `--extras`
+is comma-delimited, a command containing a comma is ambiguous and is **refused**
+with a pointer to `--extra-cmd` rather than being split into fragments.
 
 For a headless VPS (CLI-only) and also hotwire already-installed AI CLIs:
 
@@ -78,6 +103,10 @@ Set up repos only:
 
 ## 5. Customizing the catalog
 
-- Add new apps in `lib/app-catalog.zsh`.
+- Add new apps in `lib/app-catalog.zsh`. Each app needs `APP_NAME`, `APP_TAGS`
+  (categories, plus the special `base` tag for always-install), and usually
+  `APP_ROLES`. Every role in `VALID_ROLES` must appear on at least one app or it
+  silently selects nothing beyond `base` — `lib/tests/machine_setup_test.zsh`
+  asserts this, and the wizard warns at runtime.
 - Add or change personal repos in `skills/machine-setup/repos.conf`.
 - Both files are committed, so the same catalog travels to new machines.

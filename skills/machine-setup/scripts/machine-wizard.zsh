@@ -1,5 +1,8 @@
 #!/usr/bin/env zsh
 # machine-wizard: interview-driven new-machine bootstrap.
+#
+# Invoke via scripts/machine-wizard (the sh wrapper), which guarantees brew,
+# zsh, a modern bash, and zsh as the login shell before this runs.
 set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
@@ -7,48 +10,88 @@ REPO_ROOT="${SCRIPT_DIR:h:h:h}"
 
 source "$REPO_ROOT/lib/machine-setup.zsh"
 
-ROLE=""
+ROLES=""
 CATEGORIES=""
-EXTRAS=""
 YES=false
 DRY_RUN=false
 REPOS_ONLY=false
 AI=false
 
-SELECTED_APPS=()
-INSTALLED=()
-SKIPPED=()
-FAILED=()
-VALID_ROLES=(dev admin general)
+typeset -a EXTRAS RAW_CMDS SELECTED_APPS INSTALLED SKIPPED FAILED
+EXTRAS=(); RAW_CMDS=(); SELECTED_APPS=(); INSTALLED=(); SKIPPED=(); FAILED=()
+
+# Roles from DOCS/TICKET-SPEC.md Req 5. Every one of these must carry apps in
+# lib/app-catalog.zsh, or it selects nothing but `base`; checked below and
+# asserted in lib/tests/machine_setup_test.zsh.
+VALID_ROLES=(dev design data writing gaming admin general)
+VALID_CATEGORIES=(cli terminal browser productivity security media dev-tools cloud communication base)
 
 usage() {
   cat << 'EOF'
-Usage: machine-wizard.zsh [options]
+Usage: machine-wizard [options]
 
 Options:
-  --role <role>          Primary role: dev, admin, general
-  --categories <list>    Comma-separated categories
-  --extras <list>        Comma-separated app ids to force-include
+  --role <list>          Comma-separated roles: dev, design, data, writing,
+                         gaming, admin, general
+  --categories <list>    Comma-separated categories: cli, terminal, browser,
+                         productivity, security, media, dev-tools, cloud,
+                         communication
+  --extras <list>        Comma-separated app ids or package names to add.
+                         Repeatable. Unknown names are installed as packages
+                         via the local package manager.
+  --extra-cmd <command>  A raw install command, run verbatim. Repeatable.
+                         Never split, so commas and shell syntax are safe.
   --ai                   Also install and hotwire known AI CLIs
   --yes                  Run without prompting
   --dry-run              Show plan, do not execute
   --repos-only           Set up personal repos only, skip app installs
   -h, --help             Show this message
+
+Notes:
+  --extras is a comma-separated list of NAMES (`--extras neovim,ripgrep`), so a
+  comma is a separator and cannot appear inside an entry. A single entry with
+  shell syntax or whitespace is still detected and run verbatim
+  (`--extras 'brew install x'`), but anything containing a comma must use
+  --extra-cmd, which is never split:
+      --extra-cmd 'brew tap a/b, brew install c'
+  Unknown names are installed as packages via the local package manager.
 EOF
 }
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --role)
-        [[ $# -lt 2 ]] && { echo "Error: --role requires an argument" >&2; exit 1; }
-        ROLE="$2"; shift 2 ;;
+      --role|--roles)
+        [[ $# -lt 2 ]] && { echo "Error: $1 requires an argument" >&2; exit 1; }
+        ROLES="$2"; shift 2 ;;
       --categories)
         [[ $# -lt 2 ]] && { echo "Error: --categories requires an argument" >&2; exit 1; }
         CATEGORIES="$2"; shift 2 ;;
       --extras)
         [[ $# -lt 2 ]] && { echo "Error: --extras requires an argument" >&2; exit 1; }
-        EXTRAS="$2"; shift 2 ;;
+        # --extras is a COMMA-DELIMITED NAME LIST, so a comma is a separator and
+        # can never be data. A value that both contains a comma and looks like a
+        # shell command is ambiguous: splitting it would eval the fragments
+        # separately (the original bug), and not splitting it would break plain
+        # name lists. Refuse it and name the flag that does the right thing.
+        if [[ "$2" == *,* && ( "$2" == *[\|\&\;\$\(\)\<\>\*\"\']* || "$2" == *' '*[^' ']*' '* ) ]]; then
+          echo "Error: --extras is a comma-separated list of app ids/package names," >&2
+          echo "       so a comma cannot appear inside one entry. This value looks like" >&2
+          echo "       a shell command:" >&2
+          echo "         $2" >&2
+          echo "       Pass commands verbatim with --extra-cmd instead:" >&2
+          echo "         --extra-cmd '$2'" >&2
+          exit 1
+        fi
+        local e
+        for e in ${(s:,:)2}; do
+          e="${e## }"; e="${e%% }"
+          [[ -n "$e" ]] && EXTRAS+=("$e")
+        done
+        shift 2 ;;
+      --extra-cmd)
+        [[ $# -lt 2 ]] && { echo "Error: --extra-cmd requires an argument" >&2; exit 1; }
+        RAW_CMDS+=("$2"); shift 2 ;;
       --ai) AI=true; shift ;;
       --yes) YES=true; shift ;;
       --dry-run) DRY_RUN=true; shift ;;
@@ -59,83 +102,201 @@ parse_args() {
   done
 }
 
-valid_role() {
-  local r="$1" v
-  for v in "${VALID_ROLES[@]}"; do
-    [[ "$v" == "$r" ]] && return 0
+in_list() {  # in_list <needle> <haystack...>
+  local needle="$1"; shift
+  local v
+  for v in "$@"; do
+    [[ "$v" == "$needle" ]] && return 0
   done
   return 1
 }
 
+validate_roles() {
+  local r bad=()
+  for r in ${(s:,:)ROLES}; do
+    [[ -z "$r" ]] && continue
+    if ! in_list "$r" "${VALID_ROLES[@]}"; then
+      bad+=("$r")
+      continue
+    fi
+    # A role with no apps would silently contribute nothing -- surface it
+    # rather than letting the user think it did something.
+    if [[ "$(role_app_count "$r")" -eq 0 ]]; then
+      log "warning: role '$r' matches no apps in the catalog; it adds nothing beyond the base set"
+    fi
+  done
+  if (( ${#bad[@]} > 0 )); then
+    echo "Error: unknown role(s): ${bad[*]}" >&2
+    echo "Valid roles: ${VALID_ROLES[*]}" >&2
+    exit 1
+  fi
+}
+
+validate_categories() {
+  local c bad=()
+  for c in ${(s:,:)CATEGORIES}; do
+    [[ -z "$c" ]] && continue
+    in_list "$c" "${VALID_CATEGORIES[@]}" || bad+=("$c")
+  done
+  if (( ${#bad[@]} > 0 )); then
+    echo "Error: unknown categor(ies): ${bad[*]}" >&2
+    echo "Valid categories: ${VALID_CATEGORIES[*]}" >&2
+    exit 1
+  fi
+}
+
 run_interview() {
   if [[ -t 0 && "$REPOS_ONLY" != true && "$YES" != true ]]; then
-    if [[ -z "$ROLE" ]]; then
-      printf "%s" "Primary role? (dev/admin/general) "
-      read -r ROLE || true
+    if [[ -z "$ROLES" ]]; then
+      printf "%s" "Primary role(s)? (comma-separated: ${(j:/:)VALID_ROLES}) "
+      read -r ROLES || true
     fi
     if [[ -z "$CATEGORIES" ]]; then
       printf "%s" "Categories? (comma-separated: cli,terminal,browser,productivity,security,media,dev-tools,cloud,communication) "
       read -r CATEGORIES || true
     fi
   fi
-  if [[ "$REPOS_ONLY" == true ]]; then
-    return 0
-  fi
-  if [[ -z "$ROLE" || -z "$CATEGORIES" ]]; then
+  [[ "$REPOS_ONLY" == true ]] && return 0
+  if [[ -z "$ROLES" || -z "$CATEGORIES" ]]; then
     echo "Error: --role and --categories are required." >&2
     usage >&2
     exit 1
   fi
-  if ! valid_role "$ROLE"; then
-    echo "Error: --role must be one of: ${VALID_ROLES[*]}" >&2
-    usage >&2
-    exit 1
+  validate_roles
+  validate_categories
+}
+
+# ---------------------------------------------------------------------------
+# Interactive checklist: toggle on/off, add names or raw commands
+# ---------------------------------------------------------------------------
+typeset -a CHECK_ITEMS CHECK_ON
+CHECK_ITEMS=(); CHECK_ON=()
+
+checklist_load() {
+  CHECK_ITEMS=(); CHECK_ON=()
+  local item
+  for item in "${SELECTED_APPS[@]}"; do
+    CHECK_ITEMS+=("$item")
+    CHECK_ON+=("1")
+  done
+}
+
+checklist_commit() {
+  SELECTED_APPS=()
+  local i
+  for i in {1..${#CHECK_ITEMS[@]}}; do
+    [[ "${CHECK_ON[$i]}" == "1" ]] && SELECTED_APPS+=("${CHECK_ITEMS[$i]}")
+  done
+}
+
+show_checklist() {
+  local i mark
+  for i in {1..${#CHECK_ITEMS[@]}}; do
+    [[ "${CHECK_ON[$i]}" == "1" ]] && mark="x" || mark=" "
+    printf "  [%s] %2d. %s\n" "$mark" "$i" "$(item_label "${CHECK_ITEMS[$i]}")"
+  done
+  local on=0
+  for i in {1..${#CHECK_ITEMS[@]}}; do
+    # NOT (( on++ )): see lib/machine-setup.zsh role_app_count. Post-increment
+    # from 0 evaluates to 0, which `set -e` reads as failure and kills the run
+    # mid-checklist.
+    [[ "${CHECK_ON[$i]}" == "1" ]] && on=$(( on + 1 ))
+  done
+  echo "  ($on of ${#CHECK_ITEMS[@]} selected)"
+}
+
+checklist_help() {
+  cat << 'EOF'
+
+  <numbers>   toggle items on/off   (e.g. "3" or "3,7 9")
+  +<name>     add an app id or package name  (e.g. "+neovim")
+  +<command>  add a raw install command      (e.g. "+brew tap a/b && brew install c")
+  all / none  select or deselect everything
+  list        redisplay
+  help        show these commands
+  done        finish (or just press Enter)
+EOF
+}
+
+checklist_toggle() {
+  local n="$1"
+  if [[ "$n" != <-> ]] || (( n < 1 || n > ${#CHECK_ITEMS[@]} )); then
+    echo "  ? no item $n (valid range: 1-${#CHECK_ITEMS[@]})"
+    return 0
   fi
+  [[ "${CHECK_ON[$n]}" == "1" ]] && CHECK_ON[$n]="0" || CHECK_ON[$n]="1"
+}
+
+checklist_add() {
+  local raw="$1" item
+  item="$(classify_extra "$raw")" || { echo "  ? nothing to add"; return 0; }
+  local i
+  for i in {1..${#CHECK_ITEMS[@]}}; do
+    if [[ "${CHECK_ITEMS[$i]}" == "$item" ]]; then
+      CHECK_ON[$i]="1"
+      echo "  already listed as #$i; selected it"
+      return 0
+    fi
+  done
+  CHECK_ITEMS+=("$item")
+  CHECK_ON+=("1")
+  echo "  added #${#CHECK_ITEMS[@]}: $(item_label "$item")"
 }
 
 edit_checklist() {
   [[ "$YES" == true ]] && return 0
-  [[ -t 0 ]] || return 0
+  # MACHINE_WIZARD_FORCE_INTERACTIVE lets the test suite drive this loop over a
+  # plain pipe. Driving it through a real pty (script(1)) loses input lines
+  # nondeterministically, which makes the tests flaky rather than wrong.
+  [[ -t 0 || -n "${MACHINE_WIZARD_FORCE_INTERACTIVE:-}" ]] || return 0
+  [[ "$REPOS_ONLY" == true ]] && return 0
   echo ""
   echo "Selected apps:"
   show_checklist
-  printf "%s" "Numbers to remove (comma-separated), or Enter to keep all: "
-  local remove_s
-  read -r remove_s || true
-  [[ -z "$remove_s" ]] && return 0
-  local to_remove=( ${(s:,:)remove_s} )
-  local -a new=()
-  local i=1 app n remove
-  for app in "${SELECTED_APPS[@]}"; do
-    remove=false
-    for n in $to_remove; do
-      [[ "$n" == "$i" ]] && remove=true
-    done
-    [[ "$remove" != true ]] && new+=("$app")
-    ((i++))
+  checklist_help
+  local line rest tok
+  while true; do
+    printf "%s" "> "
+    read -r line || break
+    line="${line## }"; line="${line%% }"
+    case "$line" in
+      ""|done|d|q|quit) break ;;
+      list|l) show_checklist ;;
+      all|a)
+        local i
+        for i in {1..${#CHECK_ITEMS[@]}}; do CHECK_ON[$i]="1"; done
+        show_checklist ;;
+      none|n)
+        local i
+        for i in {1..${#CHECK_ITEMS[@]}}; do CHECK_ON[$i]="0"; done
+        show_checklist ;;
+      \+*)
+        rest="${line#+}"
+        rest="${rest## }"
+        checklist_add "$rest" ;;
+      help|\?) checklist_help ;;
+      *)
+        # Item numbers, separated by commas and/or whitespace. Every token has
+        # to be numeric: a non-numeric token is unrecognized input, not a
+        # missing item number, and saying "no item zzz" for it is misleading.
+        local -a toks
+        toks=( ${(s:,:)${line//[[:space:]]/,}} )
+        local all_numeric=true
+        for tok in $toks; do
+          [[ -z "$tok" ]] && continue
+          [[ "$tok" == <-> ]] || all_numeric=false
+        done
+        if [[ "$all_numeric" != true ]]; then
+          echo "  ? unrecognized: $line   (type 'help' for commands)"
+          continue
+        fi
+        for tok in $toks; do
+          [[ -n "$tok" ]] && checklist_toggle "$tok"
+        done
+        show_checklist ;;
+    esac
   done
-  SELECTED_APPS=("${new[@]}")
-}
-
-show_checklist() {
-  local i=1 app
-  for app in "${SELECTED_APPS[@]}"; do
-    printf "%2d. %s\n" "$i" "${APP_NAME[$app]:-$app}"
-    ((i++))
-  done
-}
-
-confirm_run() {
-  [[ "$YES" == true ]] && return 0
-  if [[ ! -t 0 ]]; then
-    echo ""
-    echo "Non-interactive: run again with --yes to execute this plan."
-    exit 0
-  fi
-  local a
-  printf "%s" "Run this plan? [y/N] "
-  read -r a || true
-  [[ "$a" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+  checklist_commit
 }
 
 print_plan() {
@@ -161,15 +322,13 @@ print_plan() {
       [[ -n "$post" ]] && echo "    then run $post"
     fi
   done
-  local app cmd
-  for app in "${SELECTED_APPS[@]}"; do
-    cmd="$(install_cmd "$app")"
+  local item cmd
+  for item in "${SELECTED_APPS[@]}"; do
+    cmd="$(item_install_cmd "$item")"
     if [[ -n "$cmd" ]]; then
-      echo "  install ${APP_NAME[$app]:-$app}: $cmd"
-    elif [[ "$app" == *" "* ]]; then
-      echo "  install raw: $app"
+      echo "  install $(item_label "$item"): $cmd"
     else
-      echo "  skip $app (no $OS_KIND installer)"
+      echo "  skip $(item_label "$item") (no $OS_KIND installer)"
     fi
   done
   if [[ "$AI" == true && "$REPOS_ONLY" != true ]]; then
@@ -180,46 +339,59 @@ print_plan() {
         [[ -n "$ai_cmd" ]] && echo "  install AI CLI ${TOOL_NAME[$tool]:-$tool}: $ai_cmd"
         echo "  hotwire AI CLI ${TOOL_NAME[$tool]:-$tool}"
         echo "    back up ${TOOL_LAWS[$tool]:-$tool}, symlink laws -> ${AI_LAWS:-$HOME/.ai/laws}/global_rules.md"
-        echo "    back up ${TOOL_SKILLS[$tool]:-$tool}, symlink skills -> ${AI_SKILLS:-$HOME/.ai}"
+        echo "    back up ${TOOL_SKILLS[$tool]:-$tool}, symlink skills -> ${AI_SKILLS:-$HOME/.ai/skills}"
       fi
     done
   fi
 }
 
+confirm_run() {
+  [[ "$YES" == true ]] && return 0
+  if [[ ! -t 0 ]]; then
+    echo ""
+    echo "Non-interactive: run again with --yes to execute this plan."
+    exit 0
+  fi
+  local a
+  printf "%s" "Run this plan? [y/N] "
+  read -r a || true
+  [[ "$a" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
+}
+
 execute_plan() {
   setup_repos
   [[ "$REPOS_ONLY" == true ]] && return 0
-  local app cmd
+  local item cmd
   log "installing apps..."
-  for app in "${SELECTED_APPS[@]}"; do
-    cmd="$(install_cmd "$app")"
-    if [[ -z "$cmd" && "$app" == *" "* ]]; then
-      cmd="$app"
-    fi
+  for item in "${SELECTED_APPS[@]}"; do
+    cmd="$(item_install_cmd "$item")"
     if [[ -z "$cmd" ]]; then
-      log "  $app: no $OS_KIND installer, skipping"
-      SKIPPED+=("$app")
+      log "  $(item_label "$item"): no $OS_KIND installer, skipping"
+      SKIPPED+=("$item")
       continue
     fi
-    log "  installing ${APP_NAME[$app]:-$app}..."
+    log "  installing $(item_label "$item")..."
     if eval "$cmd"; then
-      INSTALLED+=("$app")
+      INSTALLED+=("$item")
     else
-      FAILED+=("$app")
-      log "  failed to install $app"
+      FAILED+=("$item")
+      log "  failed to install $(item_label "$item")"
     fi
   done
-  if [[ "$AI" == true ]]; then
-    setup_ai_clis
-  fi
+  [[ "$AI" == true ]] && setup_ai_clis
+  return 0
 }
 
 report() {
   echo ""
   echo "=== machine-setup report ==="
-  echo "Installed: ${#INSTALLED[@]} ${INSTALLED[*]}"
-  echo "Skipped:   ${#SKIPPED[@]} ${SKIPPED[*]}"
-  echo "Failed:    ${#FAILED[@]} ${FAILED[*]}"
+  local item
+  printf "Installed: %d\n" "${#INSTALLED[@]}"
+  for item in "${INSTALLED[@]}"; do echo "  + $(item_label "$item")"; done
+  printf "Skipped:   %d\n" "${#SKIPPED[@]}"
+  for item in "${SKIPPED[@]}"; do echo "  - $(item_label "$item")"; done
+  printf "Failed:    %d\n" "${#FAILED[@]}"
+  for item in "${FAILED[@]}"; do echo "  ! $(item_label "$item")"; done
 }
 
 main() {
@@ -228,14 +400,22 @@ main() {
     log "--ai is ignored with --repos-only"
     AI=false
   fi
-  if [[ "$DRY_RUN" == true && "$REPOS_ONLY" != true && ( -z "$ROLE" || -z "$CATEGORIES" ) ]]; then
-    ROLE="${ROLE:-general}"
+  if [[ "$DRY_RUN" == true && "$REPOS_ONLY" != true && ( -z "$ROLES" || -z "$CATEGORIES" ) ]]; then
+    ROLES="${ROLES:-general}"
     CATEGORIES="${CATEGORIES:-cli}"
   fi
   run_interview
   if [[ "$REPOS_ONLY" != true ]]; then
-    preselect_apps "$ROLE" "$CATEGORIES" "$EXTRAS"
+    preselect_apps "$ROLES" "$CATEGORIES"
+    (( ${#EXTRAS[@]} > 0 ))   && add_extras "${EXTRAS[@]}"
+    # Raw commands bypass classification entirely -- they are commands by
+    # declaration, so nothing can reinterpret them as a name.
+    local c
+    for c in "${RAW_CMDS[@]}"; do
+      (( ! ${SELECTED_APPS[(Ie)cmd:$c]} )) && SELECTED_APPS+=("cmd:$c")
+    done
   fi
+  checklist_load
   edit_checklist
   print_plan
   if [[ "$DRY_RUN" == true ]]; then
@@ -245,9 +425,8 @@ main() {
   confirm_run
   execute_plan
   report
-  if [[ ${#FAILED[@]} -gt 0 ]]; then
-    exit 1
-  fi
+  (( ${#FAILED[@]} > 0 )) && exit 1
+  return 0
 }
 
 main "$@"
