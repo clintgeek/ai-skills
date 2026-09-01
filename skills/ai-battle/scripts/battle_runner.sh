@@ -6,6 +6,7 @@ shopt -s nullglob
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../ai-setup/lib/ai-tools.sh"
 source "$SCRIPT_DIR/../../../lib/spec_builder.sh"
+source "$SCRIPT_DIR/../../../lib/report-check.sh"
 
 CALLER="${CALLING_AGENT:-}"
 OPPONENT=""
@@ -63,6 +64,14 @@ Options:
                         command (for sessions where no prompt can be answered)
   --dry-run             Print the generated prompt and execution command without running
   -h, --help            Show this help message
+
+Exit codes:
+  0    a real review was produced
+  1    usage/setup error (no opponent, bad diff target, ...)
+  3    spec missing or still an unfilled DRAFT
+  4    the challenger produced NO REVIEW (empty, trivial, or it was blocked by
+       permissions). Not the same as "no findings".
+  124  the challenger exceeded --timeout and was killed
 
 EOF
 }
@@ -551,6 +560,26 @@ if [[ "$DISPATCH_STATUS" -eq 124 ]]; then
 elif [[ "$DISPATCH_STATUS" -ne 0 ]]; then
   echo "Error: challenger ($OPPONENT) exited with status $DISPATCH_STATUS. Partial output (if any) is in $REPORT_FILE; stderr diagnostics in $ERR_FILE." >&2
   exit "$DISPATCH_STATUS"
+fi
+
+# The challenger exiting 0 is NOT evidence that it reviewed anything: a
+# permission refusal, an empty file, or prose with no findings all exit clean.
+# Validate before claiming success -- this tool reported "Battle complete" over
+# a 0-byte report twice before this check existed.
+if ! validate_report "$REPORT_FILE" "$ERR_FILE"; then
+  echo "=================================================================" >&2
+  echo " ❌ NO REVIEW PRODUCED. $CALLER vs $OPPONENT did not happen." >&2
+  echo "" >&2
+  echo " Do NOT read this as 'no findings'. Nothing was inspected." >&2
+  echo " Common causes:" >&2
+  echo "   - the challenger needs tool access that headless mode auto-denies" >&2
+  echo "   - it is not authenticated / has no model configured" >&2
+  echo "   - its invocation in this script is wrong for the installed version" >&2
+  echo "" >&2
+  echo " Try another challenger (--opponent <tool>), or --list-tools to see" >&2
+  echo " what is installed. Raw output, such as it is: $REPORT_FILE" >&2
+  echo "=================================================================" >&2
+  exit 4
 fi
 
 # Success: drop the stderr log if the challenger wrote nothing to stderr.

@@ -61,6 +61,9 @@ jobs:
           echo "definitions found: $n"
           [ "$n" -eq 2 ] || { echo "FAIL: expected one backup_path and one ensure_dir" >&2; exit 1; }
 
+      - name: report-check suite
+        run: ./lib/tests/report_check_test.sh
+
       - name: spec_builder regression suite
         run: ./lib/tests/spec_builder_test.sh
 
