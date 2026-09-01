@@ -309,13 +309,24 @@ lsh() { /bin/sh -c ". '$BS'; $1" 2>/dev/null; }
 out="$(lsh 'bs_have() { [ "$1" != dscl ] && [ "$1" != getent ]; }; bs_current_login_shell')"
 assert "falls back to /etc/passwd when dscl and getent are missing (got '$out')" \
   $([[ -n "$out" && "$out" == /* ]] && echo 0 || echo 1)
-out="$(lsh 'bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell')"
-assert "  and to \$SHELL when even /etc/passwd is unreadable (got '$out')" \
+# Reaching the $SHELL fallback needs the /etc/passwd lookup to yield nothing
+# too. Stubbing only bs_have is macOS-shaped: there the user is not in
+# /etc/passwd (directory services hold the record) so the lookup naturally comes
+# up empty, but on Linux the user IS there and the fallback is never reached.
+# Stub awk as well so the branch is forced identically on both.
+NOPASSWD='bs_have() { return 1; }; awk() { :; }; SHELL=/bin/zsh; export SHELL;'
+out="$(lsh "$NOPASSWD bs_current_login_shell")"
+assert "  and to \$SHELL when the passwd lookup yields nothing (got '$out')" \
   $([[ "$out" == "/bin/zsh" ]] && echo 0 || echo 1)
 # The $SHELL fallback is a guess, so it must SAY so on stderr.
-warn="$(/bin/sh -c ". '$BS'; bs_have() { return 1; }; SHELL=/bin/zsh; export SHELL; bs_current_login_shell >/dev/null" 2>&1)"
+warn="$(/bin/sh -c ". '$BS'; $NOPASSWD bs_current_login_shell >/dev/null" 2>&1)"
 assert "  and warns that \$SHELL may not be the login shell" \
   $(grep -qi 'may not be the login shell' <<<"$warn" && echo 0 || echo 1)
+# Control: with the passwd lookup WORKING, the fallback must not fire, or the
+# two assertions above would pass on any platform for the wrong reason.
+warn2="$(/bin/sh -c ". '$BS'; bs_current_login_shell >/dev/null" 2>&1)"
+assert "  (control) a working lookup does not warn" \
+  $(! grep -qi 'may not be the login shell' <<<"$warn2" && echo 0 || echo 1)
 
 echo "== brew is a hard prerequisite on macOS: no cascade =="
 # It used to set _bs_rc=1 and carry on through zsh, bash and chsh, producing

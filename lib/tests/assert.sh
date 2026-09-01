@@ -24,6 +24,17 @@
 # front of me when the assertion needed a RELATION (different-from, below-root,
 # not-the-current-shell, defined-before-sourcing).
 #
+#   7. Stubbing only PART of a fallback chain -- forcing bs_have to fail reaches
+#      the $SHELL branch on macOS (where the user is not in /etc/passwd) but not
+#      on Linux (where they are), so the assertion tested a different branch on
+#      each platform.
+#
+# LIMITATION, stated plainly: check_control catches "both cases pass". It does
+# NOT catch "the precondition does not hold on this platform" -- disguises 5 and
+# 7 above. For those, force the branch deterministically (stub every step of the
+# chain, not the first one) and add a control asserting the branch is NOT taken
+# when the precondition is absent.
+#
 # So: capture status BEFORE building any message, and pair every guard with a
 # CONTROL that proves the guard can still fail.
 #
