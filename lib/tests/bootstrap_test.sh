@@ -107,6 +107,35 @@ chmod +x "$OLDBASH/newbash"
 out="$(bs "BS_BASH_SEARCH='$OLDBASH/newbash'; export BS_BASH_SEARCH; PATH='$OLDBASH'; bs_find_bash")"
 assert "  (control) accepts a bash reporting major version 5" $([[ -n "$out" ]] && echo 0 || echo 1)
 
+echo "== sudo escalation fails fast rather than hanging =="
+# Passwordless sudo (the usual VPS setup) just works. The gap was a box that
+# PROMPTS, run unattended: plain `sudo` blocks on stdin nobody can answer, and it
+# failed LATE -- after the plan was confirmed and packages were half installed.
+out="$(bs 'echo "BS_SUDO=$BS_SUDO"' < /dev/null)"
+assert "with no terminal, escalation uses sudo -n (fail fast)" \
+  $(grep -q 'BS_SUDO=sudo -n' <<<"$out" && echo 0 || echo 1)
+# Every escalation must route through BS_SUDO, or one call site can still hang.
+! sed -e 's/[[:space:]]*#.*$//' "$BS" | grep -nE '(bs_run|bs_run_sh ")[^|]*\bsudo\b' | grep -qv 'BS_SUDO'
+assert "  and every escalation routes through it" $?
+
+# The preflight is advisory: a machine that already has brew, zsh and bash 4
+# needs no root at all, and refusing there would be wrong.
+out="$(bs 'bs_detect_os; bs_detect_pkg_mgr; bs_check_sudo; echo rc=$?' < /dev/null)"
+if [[ "$(id -u)" == "0" ]] || sudo -n true 2>/dev/null; then
+  assert "root or passwordless sudo passes the preflight" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+else
+  assert "password-required sudo + no terminal warns up front" \
+    $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+  assert "  naming the steps that will fail" \
+    $(grep -q 'package installs, chsh, /etc/shells' <<<"$out" && echo 0 || echo 1)
+  assert "  and suggesting a way forward" \
+    $(grep -qi 'passwordless sudo' <<<"$out" && echo 0 || echo 1)
+fi
+# It must NOT abort the bootstrap; plenty of runs need no root.
+out="$(bs 'BS_DRY_RUN=1; export BS_DRY_RUN; bs_bootstrap; echo rc=$?' < /dev/null)"
+assert "a failed sudo preflight does not abort the bootstrap" \
+  $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
 echo "== consent: nothing mutates without --yes =="
 # Non-interactive, no BS_ASSUME_YES, no BS_DRY_RUN: must decline, not act.
 out="$(bs 'bs_confirm "install something?"; echo "rc=$?"' < /dev/null)"

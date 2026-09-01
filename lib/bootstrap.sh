@@ -43,6 +43,40 @@ bs_die()  { echo "[bootstrap] error: $*" >&2; return 1; }
 
 bs_have() { command -v "$1" >/dev/null 2>&1; }
 
+# How to escalate. With a terminal, plain `sudo` may prompt and that is fine.
+# With NO terminal -- cron, cloud-init, a provisioning script -- a prompt is
+# unanswerable, so use `-n` to fail fast instead of blocking on stdin forever.
+# Word-split on purpose at the call sites.
+BS_SUDO="sudo"
+[ -t 0 ] || BS_SUDO="sudo -n"
+
+# Can we escalate right now without a password? Passwordless sudo (the usual VPS
+# setup) says yes; a Mac asking for a password says no.
+bs_sudo_passwordless() {
+  bs_have sudo || return 1
+  sudo -n true 2>/dev/null
+}
+
+# Warn BEFORE any work when root will likely be needed and cannot be had. This
+# used to fail late: plan shown, confirmed, packages half installed, and then
+# `sudo chsh` hit a prompt nobody could answer.
+bs_check_sudo() {
+  if [ "$(id -u)" = "0" ]; then
+    return 0                      # already root; nothing to escalate
+  fi
+  if bs_sudo_passwordless; then
+    return 0
+  fi
+  if [ -t 0 ]; then
+    bs_log "sudo will ask for your password if a step needs root."
+    return 0
+  fi
+  bs_warn "sudo needs a password and there is no terminal to type it into."
+  bs_warn "  Steps needing root will fail: package installs, chsh, /etc/shells."
+  bs_warn "  Run interactively, or configure passwordless sudo, or skip those steps."
+  return 1
+}
+
 # Run a mutating command, honoring BS_DRY_RUN.
 bs_run() {
   if [ -n "${BS_DRY_RUN:-}" ]; then
@@ -110,11 +144,11 @@ bs_pkg_install() {
   [ -z "$BS_PKG_MGR" ] && bs_detect_pkg_mgr
   case "$BS_PKG_MGR" in
     brew)         bs_run brew install "$_bs_pkg" ;;
-    apt-get|apt)  bs_run_sh "sudo $BS_PKG_MGR update -qq && sudo $BS_PKG_MGR install -y $_bs_pkg" ;;
-    dnf|yum)      bs_run sudo "$BS_PKG_MGR" install -y "$_bs_pkg" ;;
-    pacman)       bs_run sudo pacman -S --noconfirm "$_bs_pkg" ;;
-    zypper)       bs_run sudo zypper install -y "$_bs_pkg" ;;
-    apk)          bs_run sudo apk add --no-cache "$_bs_pkg" ;;
+    apt-get|apt)  bs_run_sh "$BS_SUDO $BS_PKG_MGR update -qq && $BS_SUDO $BS_PKG_MGR install -y $_bs_pkg" ;;
+    dnf|yum)      bs_run $BS_SUDO "$BS_PKG_MGR" install -y "$_bs_pkg" ;;
+    pacman)       bs_run $BS_SUDO pacman -S --noconfirm "$_bs_pkg" ;;
+    zypper)       bs_run $BS_SUDO zypper install -y "$_bs_pkg" ;;
+    apk)          bs_run $BS_SUDO apk add --no-cache "$_bs_pkg" ;;
     *)            bs_die "no supported package manager found; install $_bs_pkg manually" ;;
   esac
 }
@@ -309,7 +343,7 @@ bs_ensure_zsh_default() {
   bs_log "login shell: $_bs_current -> $_bs_target"
   bs_ensure_in_etc_shells "$_bs_target" || return 1
   bs_confirm "  Change your login shell to $_bs_target?" || return 1
-  bs_run sudo chsh -s "$_bs_target" "$(id -un)" || {
+  bs_run $BS_SUDO chsh -s "$_bs_target" "$(id -un)" || {
     bs_warn "  chsh failed; run it yourself: sudo chsh -s $_bs_target $(id -un)"
     return 1
   }
@@ -332,7 +366,7 @@ bs_ensure_in_etc_shells() {
   fi
   bs_log "  $_bs_shell is not in /etc/shells; chsh will refuse it"
   bs_confirm "  Add $_bs_shell to /etc/shells (needs sudo)?" || return 1
-  bs_run_sh "echo '$_bs_shell' | sudo tee -a /etc/shells >/dev/null" || return 1
+  bs_run_sh "echo '$_bs_shell' | $BS_SUDO tee -a /etc/shells >/dev/null" || return 1
   bs_log "  added $_bs_shell to /etc/shells"
 }
 
@@ -397,6 +431,9 @@ bs_bootstrap() {
   bs_detect_os
   bs_detect_pkg_mgr
   bs_log "os=$BS_OS pkg-manager=${BS_PKG_MGR:-none}"
+  # Advisory, not fatal: a machine that already has brew, zsh and a modern bash
+  # needs no root at all, and refusing there would be wrong.
+  bs_check_sudo || bs_warn "  continuing; steps that need root will say so when they fail"
   _bs_rc=0
   bs_ensure_brew || _bs_rc=1
   bs_detect_pkg_mgr
