@@ -56,7 +56,17 @@ assert "bs_detect_os returns a known OS (got '$out')" $rc
 
 out="$(bs 'bs_detect_os; bs_detect_pkg_mgr; echo $BS_PKG_MGR')"
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  check "macOS resolves its package manager to brew" "brew" "$out"
+  # On a Mac WITH brew this must be "brew"; on a fresh Mac WITHOUT brew it must
+  # be empty, because there is no other package manager and bs_ensure_brew is
+  # what fixes that. Asserting "brew" unconditionally would fail on exactly the
+  # machine this tool exists for.
+  if command -v brew >/dev/null 2>&1; then
+    check "macOS with brew resolves its package manager to brew" "brew" "$out"
+  else
+    check "macOS without brew reports no package manager" "" "$out"
+    assert "  and bs_ensure_brew is the thing that would fix it" \
+      $(bs 'BS_DRY_RUN=1; export BS_DRY_RUN; bs_ensure_brew' 2>&1 | grep -q 'brew' && echo 0 || echo 1)
+  fi
 else
   assert "linux found some package manager (got '$out')" $([[ -n "$out" ]] && echo 0 || echo 1)
 fi

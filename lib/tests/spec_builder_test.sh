@@ -72,8 +72,20 @@ rm TICKET-SPEC.md
 CALLING_AGENT=devin "$BR" --dry-run >/dev/null 2>&1
 check "spec-less --dry-run exits 3" 3 $?
 [[ ! -e TICKET-SPEC.md ]];                        assert "spec-less --dry-run writes nothing" $?
-CALLING_AGENT=devin "$BR" --dry-run --no-spec >/dev/null 2>&1
-check "spec-less --dry-run with --no-spec exits 0" 0 $?
+# What F2 is actually about: --no-spec BYPASSES the spec gate. Exit 3 means the
+# gate fired; anything else means it did not. Asserting exit 0 additionally
+# required an installed challenger, which is true on a dev laptop and false on a
+# clean CI runner, where the run legitimately stops at "no AI CLIs on PATH".
+out="$(CALLING_AGENT=devin "$BR" --dry-run --no-spec 2>&1)"; rc=$?
+assert "spec-less --dry-run with --no-spec does not hit the spec gate (rc=$rc)" \
+  $([[ "$rc" -ne 3 ]] && echo 0 || echo 1)
+if [[ "$rc" -ne 0 ]]; then
+  # Whatever stopped it must be about the challenger, not the spec.
+  assert "  and any failure is challenger-related, not spec-related" \
+    $(grep -qiE 'no external AI CLIs|only AI CLI|same model family' <<<"$out" && echo 0 || echo 1)
+else
+  assert "  and it previewed a prompt" $(grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1)
+fi
 
 echo "== F3: spec scaffolds before challenger selection =="
 # Strip AI CLIs from PATH; keep system tools so git/grep still work.
