@@ -44,7 +44,7 @@ Laws are for constraints that should survive across all tools: identity, tone, f
 
 ### 2.3 Tool Registry
 
-`skills/ai-setup/lib/ai-tools.sh` is the canonical registry of the 11 AI CLIs the system knows about. It stores:
+`skills/ai-setup/lib/ai-tools.sh` is the canonical registry of the 6 AI CLIs the system tracks. It stores:
 
 - Binary name
 - Display name
@@ -184,7 +184,7 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 ~/.copilot/copilot-instructions.md -> ~/.ai/laws/global_rules.md
 ```
 
-Tools with unverified path maps (`codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`. `agy` is vetted (`TOOL_KNOWN[agy]=1`) and hotwires normally; this list and the registry must agree.
+Tools with unverified path maps (`codex`, `opencode`) must be hotwired with explicit paths via `hotwire-generic` until their registry entries are promoted to `KNOWN=1`. `agy` is vetted (`TOOL_KNOWN[agy]=1`) and hotwires normally; this list and the registry must agree.
 
 ---
 
@@ -286,11 +286,6 @@ The human must approve findings before any fixes are made.
 
 | `codex` | openai | `~/.codex/skills` | `~/.codex/global_rules.md` | no |
 | `opencode` | opencode | `~/.opencode/skills` | `~/.opencode/global_rules.md` | no |
-| `goose` | goose | `~/.goose/skills` | `~/.goose/global_rules.md` | no |
-| `aider` | aider | `~/.aider/skills` | `~/.aider/global_rules.md` | no |
-| `cursor-agent` | cursor | `~/.cursor/skills` | `~/.cursor/global_rules.md` | no |
-| `amp` | sourcegraph | `~/.amp/skills` | `~/.amp/global_rules.md` | no |
-| `qwen` | alibaba | `~/.qwen/skills` | `~/.qwen/global_rules.md` | no |
 
 A "no" in `Known` means the path has not been verified on a real install. Use `hotwire-generic` or promote it after confirming the layout.
 
@@ -303,7 +298,7 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 3. **No auto-install without explicit consent.** `install <tool>` prints the command. `--yes` is required to run it.
 4. **No secrets in this repo.** `.gitignore` covers `.env`, `*.key`, `*.pem`, `secrets/`, `.ssh/`, and backup directories.
 5. **Prompt size guards.** `ai-battle` refuses to pass >100KB prompts via argv to tools that cannot accept stdin or files.
-6. **Challengers run read-only.** Devin `normal`, Claude `plan`, Codex `sandbox read-only`, aider `--dry-run`, etc.
+6. **Challengers run read-only.** Devin `--permission-mode auto` (read-only tools only), Claude `--permission-mode plan`, Codex `exec --sandbox read-only`. Never loosen these — the diff is untrusted input.
 7. **No battles against empty specs.** A missing spec is scaffolded as a DRAFT and the battle exits for the builder to fill in real requirements — before challenger selection, so the scaffold happens even with no eligible opponent installed; unfilled DRAFT scaffolds are refused, spec-less `--dry-run` included; `--no-spec` is the only opt-out and warns loudly.
 
 ---

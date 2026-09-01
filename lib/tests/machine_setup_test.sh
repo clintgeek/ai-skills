@@ -168,8 +168,13 @@ for fn in tool_roster resolve_tool_selection tool_install_one; do
   n=$(grep -rlE "^${fn}\(\)" $(git ls-files '*.sh' '*.zsh') 2>/dev/null | wc -l | tr -d ' ')
   check "$fn is defined exactly once" 1 "$n"
 done
-out="$(bash -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; resolve_tool_selection '2, claude 11 bogus' 2>/dev/null | tr '\n' ' '")"
-check "selection resolves numbers, names and dedupes" "claude qwen " "$out"
+# Positions are 1-based over AI_TOOLS: 2 = claude (also named, to prove dedupe),
+# 6 = the last entry. Derived rather than hardcoded so trimming the registry
+# does not silently make this assert the wrong tool.
+LAST_TOOL="$(bash -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; echo \${AI_TOOLS[\${#AI_TOOLS[@]}-1]}")"
+NTOOLS="$(bash -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; echo \${#AI_TOOLS[@]}")"
+out="$(bash -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; resolve_tool_selection '2, claude $NTOOLS bogus' 2>/dev/null | tr '\n' ' '")"
+check "selection resolves numbers, names and dedupes" "claude $LAST_TOOL " "$out"
 for sh in bash zsh; do
   if command -v "$sh" >/dev/null 2>&1; then
     o="$($sh -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; resolve_tool_selection '2' | tr -d '\n'")"

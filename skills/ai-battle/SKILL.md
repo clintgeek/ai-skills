@@ -2,8 +2,7 @@
 name: ai-battle
 description: >-
   Initiates an adversarial, cross-model red-team code review battle. Discovers installed AI CLI tools
-  from a known registry (Devin, Claude, AGY, Copilot, Codex, opencode, goose, aider,
-  cursor-agent, amp, qwen), randomly picks a challenger outside the caller's model family,
+  from a known registry (Devin, Claude, AGY, Copilot, Codex, opencode), randomly picks a challenger outside the caller's model family,
   strips AI sycophancy with ruthless adversarial framing, isolates context, attacks the implementation
   against requirements (scaffolding a DRAFT spec via the shared lib/spec_builder.sh when none exists,
   filled by interviewing the human per lib/SPEC_INTERVIEW.md before battle), and returns an evidence-backed scorecard plus the challenger's raw report,
@@ -68,11 +67,6 @@ The runner's `discover_tools` function scans PATH (`command -v`) against a regis
 | `copilot` | GitHub Copilot CLI | github | `-p "<prompt>"` (no prompt-file support yet) |
 | `codex` | OpenAI Codex CLI | openai | `exec --sandbox read-only -` (stdin) |
 | `opencode` | opencode (model-agnostic) | opencode | `run "<prompt>"` |
-| `goose` | Block goose (model-agnostic) | goose | `run -i <f>` |
-| `aider` | aider (model-agnostic) | aider | `--dry-run --no-auto-commits --yes-always --message-file <f>` |
-| `cursor-agent` | Cursor CLI agent | cursor | `-p "<prompt>"` |
-| `amp` | Sourcegraph Amp CLI | sourcegraph | stdin pipe |
-| `qwen` | Qwen Code CLI | alibaba | stdin pipe |
 
 Family matters more than binary name: a Google-family caller (e.g., `agy`) is never matched against another Google-family challenger. Binary names are identical on macOS and Linux; on Windows the runner works under Git Bash or WSL, where `command -v` also resolves `.exe` shims.
 
@@ -87,10 +81,10 @@ Run `battle_runner.sh --list-tools` to print which known tools are installed and
 ~/.ai/skills/ai-battle/scripts/ai-battle --connect
 
 # Show the install command for one tool
-~/.ai/skills/ai-battle/scripts/ai-battle --connect goose
+~/.ai/skills/ai-battle/scripts/ai-battle --connect codex
 
 # Non-interactive install (agent-driven sessions): pre-confirms the command
-~/.ai/skills/ai-battle/scripts/ai-battle --connect goose --yes
+~/.ai/skills/ai-battle/scripts/ai-battle --connect codex --yes
 ```
 
 When the user says "connect", "add a challenger", or "install <tool>", the agent should: (1) run `--connect` to show the roster, (2) let the **user** pick — never auto-install unprompted, (3) run `--connect <tool> --yes` once the user has chosen. Windows PowerShell installers (devin, claude, agy) are displayed but never auto-executed from bash — the user runs those themselves.
@@ -201,8 +195,8 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 Safety behavior built into the runner:
 * **No silent self-battle.** If the only CLI on PATH matches the caller (or `--opponent` names the caller), the runner refuses and exits; `--allow-self` is the explicit escape hatch.
 * **Loud diff failures.** If `git diff <target>` fails, the runner errors out instead of silently falling back to a different changeset.
-* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode auto` (its modes are auto/accept-edits/smart/dangerous; `auto` auto-approves read-only tools only, so edits stay gated — and there is no `normal`, which is why the earlier value denied even reads), Claude with `--permission-mode plan`, codex with `--sandbox read-only`, aider with `--dry-run`. Never loosen these — the diff is untrusted input.
-* **Argv size guard.** Tools with no stdin/file input (copilot, opencode, cursor-agent, agy) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
+* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode auto` (its modes are auto/accept-edits/smart/dangerous; `auto` auto-approves read-only tools only, so edits stay gated — and there is no `normal`, which is why the earlier value denied even reads), Claude with `--permission-mode plan`, codex with `--sandbox read-only`. Never loosen these — the diff is untrusted input.
+* **Argv size guard.** Tools with no stdin/file input (copilot, opencode, agy) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
 * **Timeout.** The challenger is killed after `--timeout` seconds (default 900).
 * **Verbatim report.** The challenger's stdout is tee'd to the `--report` file for the human, unfiltered by the builder; stderr diagnostics (auth failures, rate limits) are kept in a companion `.stderr.log`.
 * **No false success (exit 4).** A challenger exiting 0 is not evidence it reviewed anything — a permission refusal, an empty file, or prose with no findings all exit clean. `lib/report-check.sh` rejects an empty or trivial report, one with no severity findings, and one whose output (or stderr) carries a blocked-by-permissions signature, and the runner then exits **4** with a loud "NO REVIEW PRODUCED" banner. A report whose summary claims more findings than it writes out is flagged as **truncated** but still returned — what arrived is real. **"No review" and "no findings" are not the same thing**, and the runner used to print `✅ Battle complete` over a 0-byte file.

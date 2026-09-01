@@ -22,7 +22,7 @@ Use this skill when the user wants to:
 
 ## 2. Inventory
 
-Run `~/.ai/skills/ai-setup/scripts/ai-setup inventory` to see which of the 11 ai-battle CLI tools are installed and which are already hotwired.
+Run `~/.ai/skills/ai-setup/scripts/ai-setup inventory` to see which of the 6 tracked AI CLIs are installed and which are already hotwired.
 
 The registry is:
 
@@ -34,11 +34,6 @@ The registry is:
 | `copilot` | GitHub Copilot CLI | github |
 | `codex` | OpenAI Codex CLI | openai |
 | `opencode` | opencode | opencode |
-| `goose` | Block goose | goose |
-| `aider` | aider | aider |
-| `cursor-agent` | Cursor CLI agent | cursor |
-| `amp` | Sourcegraph Amp CLI | sourcegraph |
-| `qwen` | Qwen Code CLI | alibaba |
 
 ## 3. Hotwire installed tools
 

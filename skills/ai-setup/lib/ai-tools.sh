@@ -20,8 +20,17 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) OS_KIND="windows" ;;
 esac
 
+# The tools this repo actually tracks. Trimmed from eleven on 2026-09-01: five
+# of the originals were neither installed nor path-verified, and their entries
+# were frozen guesses -- install commands that go stale and skills/laws paths
+# `hotwire` refuses to use anyway (TOOL_KNOWN=0 sends you to hotwire-generic).
+#
+# Dropped: goose, aider, cursor-agent, amp, qwen. Nothing is lost by dropping a
+# tool from here: hotwire-generic wires anything with explicit paths, and an
+# install command is a lookup rather than something worth freezing in a file.
+#
 # List of tool binary names in the battle/setup registry.
-AI_TOOLS=(devin claude agy copilot codex opencode goose aider cursor-agent amp qwen)
+AI_TOOLS=(devin claude agy copilot codex opencode)
 
 # Backwards-compatible alias for ai-battle.
 KNOWN_TOOLS=("${AI_TOOLS[@]}")
@@ -33,11 +42,6 @@ TOOL_NAME[agy]="Google Antigravity CLI"
 TOOL_NAME[copilot]="GitHub Copilot CLI"
 TOOL_NAME[codex]="OpenAI Codex CLI"
 TOOL_NAME[opencode]="opencode"
-TOOL_NAME[goose]="Block goose"
-TOOL_NAME[aider]="aider"
-TOOL_NAME[cursor-agent]="Cursor CLI agent"
-TOOL_NAME[amp]="Sourcegraph Amp CLI"
-TOOL_NAME[qwen]="Qwen Code CLI"
 
 declare -A TOOL_FAMILY
 TOOL_FAMILY[devin]="cognition"
@@ -46,11 +50,6 @@ TOOL_FAMILY[agy]="google"
 TOOL_FAMILY[copilot]="github"
 TOOL_FAMILY[codex]="openai"
 TOOL_FAMILY[opencode]="opencode"
-TOOL_FAMILY[goose]="goose"
-TOOL_FAMILY[aider]="aider"
-TOOL_FAMILY[cursor-agent]="cursor"
-TOOL_FAMILY[amp]="sourcegraph"
-TOOL_FAMILY[qwen]="alibaba"
 
 declare -A TOOL_INSTALL_LINUX
 TOOL_INSTALL_LINUX[devin]='curl -fsSL https://cli.devin.ai/install.sh | bash'
@@ -59,11 +58,6 @@ TOOL_INSTALL_LINUX[agy]='curl -fsSL https://antigravity.google/cli/install.sh | 
 TOOL_INSTALL_LINUX[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_LINUX[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_LINUX[opencode]='curl -fsSL https://opencode.ai/install | bash'
-TOOL_INSTALL_LINUX[goose]='curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash'
-TOOL_INSTALL_LINUX[aider]='python -m pip install aider-install && aider-install'
-TOOL_INSTALL_LINUX[cursor-agent]='curl https://cursor.com/install -fsS | bash'
-TOOL_INSTALL_LINUX[amp]='npm install -g @sourcegraph/amp'
-TOOL_INSTALL_LINUX[qwen]='npm install -g @qwen-code/qwen-code'
 
 declare -A TOOL_INSTALL_MAC
 TOOL_INSTALL_MAC[devin]='curl -fsSL https://cli.devin.ai/install.sh | bash'
@@ -72,11 +66,6 @@ TOOL_INSTALL_MAC[agy]='curl -fsSL https://antigravity.google/cli/install.sh | ba
 TOOL_INSTALL_MAC[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_MAC[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_MAC[opencode]='curl -fsSL https://opencode.ai/install | bash'
-TOOL_INSTALL_MAC[goose]='curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash'
-TOOL_INSTALL_MAC[aider]='python -m pip install aider-install && aider-install'
-TOOL_INSTALL_MAC[cursor-agent]='curl https://cursor.com/install -fsS | bash'
-TOOL_INSTALL_MAC[amp]='npm install -g @sourcegraph/amp'
-TOOL_INSTALL_MAC[qwen]='npm install -g @qwen-code/qwen-code'
 
 declare -A TOOL_INSTALL_WINDOWS
 TOOL_INSTALL_WINDOWS[devin]='irm https://static.devin.ai/cli/setup.ps1 | iex  (PowerShell)'
@@ -85,11 +74,6 @@ TOOL_INSTALL_WINDOWS[agy]='irm https://antigravity.google/cli/install.ps1 | iex 
 TOOL_INSTALL_WINDOWS[copilot]='npm install -g @github/copilot'
 TOOL_INSTALL_WINDOWS[codex]='npm install -g @openai/codex'
 TOOL_INSTALL_WINDOWS[opencode]='curl -fsSL https://opencode.ai/install | bash'
-TOOL_INSTALL_WINDOWS[goose]='curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash'
-TOOL_INSTALL_WINDOWS[aider]='python -m pip install aider-install && aider-install'
-TOOL_INSTALL_WINDOWS[cursor-agent]='curl https://cursor.com/install -fsS | bash'
-TOOL_INSTALL_WINDOWS[amp]='npm install -g @sourcegraph/amp'
-TOOL_INSTALL_WINDOWS[qwen]='npm install -g @qwen-code/qwen-code'
 
 declare -A TOOL_INSTALL_NOTE
 TOOL_INSTALL_NOTE[codex]="Alternative: brew install codex"
@@ -104,11 +88,6 @@ TOOL_SKILLS[agy]="$HOME/.antigravity/skills"
 TOOL_SKILLS[copilot]="$HOME/.copilot/skills"
 TOOL_SKILLS[codex]="$HOME/.codex/skills"
 TOOL_SKILLS[opencode]="$HOME/.opencode/skills"
-TOOL_SKILLS[goose]="$HOME/.goose/skills"
-TOOL_SKILLS[aider]="$HOME/.aider/skills"
-TOOL_SKILLS[cursor-agent]="$HOME/.cursor/skills"
-TOOL_SKILLS[amp]="$HOME/.amp/skills"
-TOOL_SKILLS[qwen]="$HOME/.qwen/skills"
 
 declare -A TOOL_LAWS
 TOOL_LAWS[devin]="$HOME/.config/devin/global_rules.md"
@@ -117,11 +96,6 @@ TOOL_LAWS[agy]="$HOME/.antigravity/global_rules.md"
 TOOL_LAWS[copilot]="$HOME/.copilot/copilot-instructions.md"
 TOOL_LAWS[codex]="$HOME/.codex/global_rules.md"
 TOOL_LAWS[opencode]="$HOME/.opencode/global_rules.md"
-TOOL_LAWS[goose]="$HOME/.goose/global_rules.md"
-TOOL_LAWS[aider]="$HOME/.aider/global_rules.md"
-TOOL_LAWS[cursor-agent]="$HOME/.cursor/global_rules.md"
-TOOL_LAWS[amp]="$HOME/.amp/global_rules.md"
-TOOL_LAWS[qwen]="$HOME/.qwen/global_rules.md"
 
 declare -A TOOL_KNOWN
 TOOL_KNOWN[devin]=1
@@ -130,11 +104,6 @@ TOOL_KNOWN[copilot]=1
 TOOL_KNOWN[agy]=1
 TOOL_KNOWN[codex]=0
 TOOL_KNOWN[opencode]=0
-TOOL_KNOWN[goose]=0
-TOOL_KNOWN[aider]=0
-TOOL_KNOWN[cursor-agent]=0
-TOOL_KNOWN[amp]=0
-TOOL_KNOWN[qwen]=0
 
 # Tool metadata helpers (same names as the originals in ai-battle for easy sourcing).
 

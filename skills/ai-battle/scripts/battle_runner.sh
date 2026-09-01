@@ -145,11 +145,6 @@ fi
 #   copilot      GitHub Copilot CLI
 #   codex        OpenAI Codex CLI
 #   opencode     opencode (model-agnostic terminal agent)
-#   goose        Block goose (model-agnostic)
-#   aider        aider (model-agnostic pair programmer)
-#   cursor-agent Cursor CLI agent
-#   amp          Sourcegraph Amp CLI
-#   qwen         Qwen Code CLI (gemini-cli fork, Alibaba models)
 # ---------------------------------------------------------------------------
 # KNOWN_TOOLS, discover_tools, family_of, install_command, and install_note are sourced from ai-setup/lib/ai-tools.sh
 
@@ -499,7 +494,7 @@ require_argv_prompt() {
   local size
   size="$(wc -c < "$PROMPT_FILE")"
   if (( size > 100000 )); then
-    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec, or pick an opponent that takes a file/stdin (devin, codex, goose, qwen, amp)." >&2
+    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec, or pick an opponent that takes a file/stdin (devin, codex)." >&2
     exit 1
   fi
 }
@@ -529,9 +524,6 @@ case "$OPPONENT" in
     require_argv_prompt
     dispatch agy -p "$(cat "$PROMPT_FILE")"
     ;;
-  qwen)
-    dispatch qwen < "$PROMPT_FILE"
-    ;;
   copilot)
     # No --prompt-file support yet (github/copilot-cli#3398); default mode
     # requires tool approval, so writes are denied headlessly. Never add
@@ -549,20 +541,6 @@ case "$OPPONENT" in
   opencode)
     require_argv_prompt
     dispatch opencode run "$(cat "$PROMPT_FILE")"
-    ;;
-  goose)
-    dispatch goose run -i "$PROMPT_FILE"
-    ;;
-  aider)
-    # --dry-run: aider is an editor at heart; never let it apply changes.
-    dispatch aider --dry-run --no-auto-commits --yes-always --message-file "$PROMPT_FILE"
-    ;;
-  cursor-agent)
-    require_argv_prompt
-    dispatch cursor-agent -p "$(cat "$PROMPT_FILE")"
-    ;;
-  amp)
-    dispatch amp < "$PROMPT_FILE"
     ;;
   *)
     echo "Unknown opponent command handler: $OPPONENT (known: ${KNOWN_TOOLS[*]})" >&2

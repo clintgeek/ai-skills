@@ -27,7 +27,7 @@ fi
 ~/.ai/skills/ai-setup/scripts/ai-setup inventory
 ```
 
-This shows which of the 11 tracked AI CLIs are installed and which are already hotwired.
+This shows which of the 6 tracked AI CLIs are installed and which are already hotwired.
 
 ### 3. Hotwire every installed tool
 
@@ -37,7 +37,9 @@ For each tool that shows `installed: yes`, run:
 ~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
 ```
 
-Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
+Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`.
+
+Anything else wires with `hotwire-generic <tool> <skills-path> <laws-path>` — the registry is a convenience for tools whose paths are vetted, not a limit on what can be hotwired.
 
 If a tool is installed but has no built-in path map, use `hotwire-generic` with paths the user provides, or ask before touching it:
 
@@ -184,7 +186,7 @@ BS_DRY_RUN=1 /bin/sh -c '. ~/.ai/lib/bootstrap.sh; bs_bootstrap'
   - `SKILL.md` — the full prompt for an AI assistant.
   - `scripts/ai-setup` — `sh` wrapper: bootstrap, then re-exec under bash 4+.
   - `scripts/ai-setup.sh` — the setup runner.
-  - `lib/ai-tools.sh` — the 11-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
+  - `lib/ai-tools.sh` — the 6-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
 - `skills/ai-battle/` — adversarial cross-model code review skill.
   - `SKILL.md` — the battle prompt.
   - `scripts/ai-battle` — `sh` wrapper: bootstrap, then re-exec under bash 4+.
