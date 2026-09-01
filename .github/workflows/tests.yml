@@ -91,13 +91,19 @@ jobs:
           ./skills/ai-setup/scripts/ai-setup.sh inventory
           # An unknown tool must produce the friendly message, not an
           # "unbound variable" abort under set -u.
-          out="$(./skills/ai-setup/scripts/ai-setup.sh hotwire definitely-not-a-tool 2>&1 || true)"
-          echo "$out"
-          case "$out" in
-            *"unbound variable"*) echo "FAIL: hotwire crashed on unknown tool" >&2; exit 1 ;;
-            *"no built-in path map"*) ;;
-            *) echo "FAIL: unexpected hotwire output" >&2; exit 1 ;;
-          esac
+          # An unknown tool name is a USAGE error and must be reported as such
+          # whether or not the repo is checked out at ~/.ai (on a runner it is
+          # not -- it is at the workspace path).
+          for root in "$PWD" /definitely/not/here; do
+            out="$(AI_ROOT="$root" ./skills/ai-setup/scripts/ai-setup.sh hotwire definitely-not-a-tool 2>&1 || true)"
+            echo "--- AI_ROOT=$root"
+            echo "$out"
+            case "$out" in
+              *"unbound variable"*) echo "FAIL: hotwire crashed on unknown tool" >&2; exit 1 ;;
+              *"no built-in path map"*) ;;
+              *) echo "FAIL: unknown tool not reported as a usage error" >&2; exit 1 ;;
+            esac
+          done
 
       - name: machine-setup dry-run
         run: |

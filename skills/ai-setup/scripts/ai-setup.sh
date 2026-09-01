@@ -148,7 +148,10 @@ require_repo() {
 cmd_hotwire() {
   local t="$1"
   log "hotwire $t"
-  require_repo
+  # Argument validity first, environment second: require_repo lives just above
+  # the linking below, because a bogus tool name is a usage error regardless of
+  # whether the repo happens to be checked out, and "clone the repo" is a
+  # useless thing to say to someone who mistyped a name.
   # Index the registry only through :- defaults: under `set -u` a bare
   # ${TOOL_SKILLS[$t]} on an unknown tool aborts with "unbound variable"
   # before the friendly message below can ever be printed.
@@ -162,6 +165,7 @@ cmd_hotwire() {
     log "  $t not installed. Install it first with: ai-setup.sh install $t"
     exit 1
   fi
+  require_repo
   link_skills "$skills_root"
   link_laws "$laws_root"
   log "  $t hotwired"
@@ -172,11 +176,11 @@ cmd_hotwire_generic() {
   local skills="$2"
   local laws="$3"
   log "hotwire-generic $t"
-  require_repo
   if ! command -v "$t" >/dev/null 2>&1; then
     log "  $t not installed. Install it first."
     exit 1
   fi
+  require_repo
   link_skills "$skills"
   link_laws "$laws"
   log "  $t hotwired"

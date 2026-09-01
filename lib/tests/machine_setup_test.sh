@@ -96,6 +96,27 @@ out="$("$MS" --dry-run --no-repos --no-clis < /dev/null 2>&1)"
 assert "--no-repos skips the repo step" $(grep -q 'repos (skipped)' <<<"$out" && echo 0 || echo 1)
 assert "--no-clis skips the CLI step" $(grep -qE 'AI CLIs$' <<<"$out" && echo 0 || echo 1)
 
+echo "== ai-setup reports usage errors before environment errors =="
+# An unknown tool name is a usage error whether or not the repo is checked out
+# at ~/.ai. On a CI runner it is not (the checkout is at the workspace path), and
+# require_repo used to fire first -- telling someone who mistyped a name to go
+# clone a repo.
+AS="$REPO_ROOT/skills/ai-setup/scripts/ai-setup.sh"
+for root in "$REPO_ROOT" /definitely/not/here; do
+  out="$(AI_ROOT="$root" "$AS" hotwire definitely-not-a-tool 2>&1 || true)"
+  assert "unknown tool is a usage error with AI_ROOT=$(basename "$root")" \
+    $(grep -q 'no built-in path map' <<<"$out" && echo 0 || echo 1)
+  assert "  and never an unbound-variable crash" \
+    $(! grep -q 'unbound variable' <<<"$out" && echo 0 || echo 1)
+done
+# But a REAL tool with a missing repo must still refuse, or P1-6 is back.
+if command -v claude >/dev/null 2>&1; then
+  out="$(AI_ROOT=/definitely/not/here "$AS" hotwire claude 2>&1 || true)"
+  assert "a real tool with a missing repo still refuses to link" \
+    $(grep -q 'Refusing to link tools at a missing repo' <<<"$out" && echo 0 || echo 1)
+  assert "  and creates nothing" $([[ ! -d /definitely ]] && echo 0 || echo 1)
+fi
+
 echo "== the CLI roster is shared, not duplicated =="
 # Line-anchored: a mention in a comment is not a definition.
 cd "$REPO_ROOT"
