@@ -37,15 +37,23 @@ jobs:
       - name: bootstrap suite
         run: ./lib/tests/bootstrap_test.sh
 
-      - name: bootstrap is a no-op on an already-provisioned machine
+      - name: dry-run bootstrap changes nothing
         run: |
+          # The invariant is "changes nothing", NOT "has nothing to change". A
+          # runner's login shell is /bin/bash, so a pending chsh to zsh is
+          # CORRECT here -- asserting no pending work encoded a provisioned
+          # laptop as the only valid state. lib/tests/bootstrap_test.sh covers
+          # the pending/not-pending branches; this step guards the mutation.
+          before_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
+          before_shells="$(md5sum /etc/shells | cut -d' ' -f1)"
           out="$(BS_DRY_RUN=1 /bin/sh -c '. ./lib/bootstrap.sh; bs_bootstrap')"
           echo "$out"
-          # Nothing should be pending on a runner that already has zsh+bash 5.
-          if echo "$out" | grep -q 'DRY RUN'; then
-            echo "FAIL: bootstrap wants to mutate an already-provisioned machine" >&2
-            exit 1
-          fi
+          after_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
+          after_shells="$(md5sum /etc/shells | cut -d' ' -f1)"
+          [ "$before_shell" = "$after_shell" ] || { echo "FAIL: dry run changed the login shell" >&2; exit 1; }
+          [ "$before_shells" = "$after_shells" ] || { echo "FAIL: dry run modified /etc/shells" >&2; exit 1; }
+          echo "$out" | grep -qE '^\s*\+ ' && { echo "FAIL: dry run executed a real command" >&2; exit 1; }
+          echo "login shell and /etc/shells unchanged; no commands executed"
 
       - name: bootstrap installs nothing without consent
         run: |
