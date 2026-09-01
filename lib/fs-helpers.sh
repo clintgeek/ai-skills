@@ -112,6 +112,36 @@ backup_path() {
   return 0
 }
 
+# Refuse to configure the wrong user's account.
+#
+# These tools set up the INVOKING user: $HOME/.ai, the tool symlinks under
+# $HOME, the login shell, $HOME/.zprofile. Run the whole thing under `sudo` and
+# $HOME becomes /var/root or /root and `id -un` becomes root, so every one of
+# those lands on root instead -- silently, plausibly, and reporting success.
+# `sudo ./machine-setup` is a natural thing to type, because it does install
+# packages; the individual operations that need root already call sudo
+# themselves.
+#
+# Being root is NOT itself an error: on plenty of VPSes root is simply who you
+# are, and configuring root's account is then correct. The tell is SUDO_USER --
+# set to a different, real user means someone escalated from an account that is
+# the one actually wanting configuration.
+#
+# FS_ALLOW_SUDO=1 overrides, for anyone who really means it.
+refuse_if_sudo() {
+  [ -n "${FS_ALLOW_SUDO:-}" ] && return 0
+  [ -n "${SUDO_USER:-}" ] || return 0
+  [ "${SUDO_USER}" = "root" ] && return 0
+  _fs_log "Refusing to run under sudo."
+  _fs_log "  This configures the invoking user's account -- \$HOME, the login shell,"
+  _fs_log "  ~/.zprofile and the tool symlinks. Under sudo all of those become"
+  _fs_log "  root's ($HOME), not ${SUDO_USER}'s, and it would look like it worked."
+  _fs_log "  Run it as ${SUDO_USER}; it calls sudo itself where it needs to:"
+  _fs_log "    sudo -u ${SUDO_USER} -i   # then re-run"
+  _fs_log "  Set FS_ALLOW_SUDO=1 if you genuinely want to configure root."
+  return 1
+}
+
 ensure_dir() {
   if [ ! -d "$1" ]; then
     mkdir -p "$1" || return 1

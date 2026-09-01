@@ -114,6 +114,39 @@ out="$(fs "ensure_dir '$W/home/a/b/c'; echo rc=\$?")"
 assert "  is idempotent and silent on an existing dir" \
   $(grep -q 'rc=0' <<<"$out" && ! grep -q 'created' <<<"$out" && echo 0 || echo 1)
 
+echo "== refuse_if_sudo: never configure the wrong user's account =="
+# The username varies per machine (ccrocker / crocker / rallycenter), so
+# everything derives from $HOME and `id -un`. Under sudo BOTH become root's, so
+# the repo, the symlinks, the login shell and .zprofile all land on root --
+# silently, and reporting success. `sudo ./machine-setup` is a natural thing to
+# type because it does install packages.
+out="$(/bin/sh -c ". '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+assert "a normal run is unaffected" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
+out="$(/bin/sh -c "SUDO_USER=rallycenter; export SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+assert "sudo from a real user is refused" $(grep -q 'rc=1' <<<"$out" && echo 0 || echo 1)
+assert "  and the message names that user, not a generic warning" \
+  $(grep -q 'rallycenter' <<<"$out" && echo 0 || echo 1)
+assert "  and says how to run it correctly" $(grep -q 'sudo -u rallycenter' <<<"$out" && echo 0 || echo 1)
+
+# Being root is not itself wrong: on many VPSes root is simply who you are.
+out="$(/bin/sh -c "unset SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+assert "genuinely being root (no SUDO_USER) is allowed" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+out="$(/bin/sh -c "SUDO_USER=root; export SUDO_USER; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+assert "  as is SUDO_USER=root" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+out="$(/bin/sh -c "SUDO_USER=rallycenter FS_ALLOW_SUDO=1; export SUDO_USER FS_ALLOW_SUDO; . '$FS'; refuse_if_sudo; echo rc=\$?" 2>&1)"
+assert "  and FS_ALLOW_SUDO=1 overrides deliberately" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+
+echo "== the entry points actually enforce it =="
+MS="$SCRIPT_DIR/../../skills/machine-setup/scripts/machine-setup"
+AS="$SCRIPT_DIR/../../skills/ai-setup/scripts/ai-setup.sh"
+SUDO_USER=rallycenter HOME="$W/fakeroot" "$MS" --dry-run --no-clis < /dev/null >/dev/null 2>&1; rc=$?
+check "machine-setup exits non-zero under sudo" 1 "$rc"
+SUDO_USER=rallycenter HOME="$W/fakeroot" "$AS" inventory >/dev/null 2>&1; rc=$?
+check "ai-setup exits non-zero under sudo" 1 "$rc"
+assert "  and neither created anything in the fake root home" \
+  $([[ ! -e "$W/fakeroot" ]] && echo 0 || echo 1)
+
 echo "== logging goes to stderr, never into the returned path =="
 # backup_path prints the backup location on stdout; a log line mixed in would
 # corrupt bak="$(backup_path ...)".

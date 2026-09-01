@@ -41,7 +41,16 @@ underlying defect independently from the code, not accept that it existed.
    detected, not warned about. Non-negotiable per the human.
 4. The zsh-install logic must be **extracted out of** `skills/machine-setup/scripts/machine-wizard`
    into a shared `lib/` location, usable by **every** skill that needs zsh or a newer bash.
-5. The tooling must work for **any user**, not only the repo owner (`clintcrocker`).
+5. The tooling must work under **any username and home layout**. There is one human;
+   the account name differs per machine (`ccrocker` on the work Mac, `crocker` on the
+   home server, `rallycenter` on the VPS, others elsewhere) and so does the home
+   directory root (`/Users/x` on macOS, `/home/x` on Linux). Nothing may assume a
+   username or a home path.
+
+   *(Builder note: I originally read this as "portable to a different person" and
+   answered that instead. Corrected by the owner. The right reading found a real
+   defect the wrong one could not: running under `sudo` silently configures root's
+   account -- $HOME, login shell, .zprofile, symlinks -- and reports success.)*
 
 ### 2.2 Builder-authored defect claims (treat as UNVERIFIED)
 
@@ -66,12 +75,19 @@ correct and complete — from the code, not from these statements.
 15. `spec_builder build` must honor its own documented exit codes.
 16. Nothing may mutate the machine without consent (`--yes` / an interactive `y`).
 
+> **Attribution.** Section 2.1 is the owner's words. Section 2.2 is builder-authored
+> defect claims, to be verified independently. Sections 3 and 4 were builder inferences,
+> reviewed by the owner on 2026-09-01: requirement 5 was corrected, the `repos.conf`
+> scope entry struck, and invariants 2 and 7 are marked BUILDER-PROPOSED where the rule
+> did not originate with them.
+
 ## 3. Out of Scope
 - Porting `battle_runner.sh` or `ai-setup.sh` from bash to zsh. The human accepted
   "install both" instead; those two remain bash and require bash 4+.
-- Making `skills/machine-setup/repos.conf` portable to other users. It still hardcodes
-  `clintgeek/ai-skills` and `clintgeek/dotfiles` by design; the human has NOT signed off
-  on changing it, and requirement 5 was raised as a question, not a mandate to fix this.
+- Making `skills/machine-setup/repos.conf` "portable to other users". Struck: there are
+  no other users. `clintgeek/ai-skills` and `clintgeek/dotfiles` are the owner's repos on
+  every machine and are correct as committed, permanently. This entry existed because the
+  builder misread requirement 5 as being about a different person.
 - Direct tests for `execute_plan` / `report`. Known and stated gap: exercising them means
   real package installs or real clones. No stub harness was built.
 - Fixing spec discovery so it searches `DOCS/` (identified as P1-2 in the builder report,
@@ -86,7 +102,9 @@ correct and complete — from the code, not from these statements.
    fall under this.
 2. **The login shell must never be left broken.** A `chsh` target must be present in
    `/etc/shells` first, and an existing zsh login shell must not be swapped merely to
-   chase a newer build.
+   chase a newer build. Preferring the *system* zsh over Homebrew's is
+   BUILDER-PROPOSED and owner-ratified: a login shell under `/opt/homebrew` locks the
+   user out if that install is removed. `BS_ZSH_PREFER=newest` opts out.
 3. **`lib/bootstrap.sh` must remain POSIX `sh`.** It runs before zsh or bash 4 is known
    to exist. Any `[[ ]]`, array, or zsh-ism in it is a defect regardless of whether it
    happens to work on the authors machine.
@@ -95,10 +113,16 @@ correct and complete — from the code, not from these statements.
    verify that exception is actually safe.)
 5. **The challenger in ai-battle stays read-only.** No change may loosen a tools
    permission mode, sandbox, or dry-run flag.
-6. **No user-identity assumptions.** No hardcoded `/Users/<name>`, and `$HOME` /
-   `id -un` used throughout.
-7. **Tests must fail when the code is wrong.** The branch contains at least two admitted
-   cases of tests passing for the wrong reason. Any test that cannot fail is a defect.
+6. **No username or home-layout assumptions.** No hardcoded `/Users/<name>`; `$HOME`
+   and `id -un` throughout. And because both of those become root's under `sudo`, the
+   entry points refuse to run that way rather than configuring the wrong account --
+   being genuinely root is fine, escalating from a real user is not.
+7. **Tests must fail when the code is wrong.** Any test that cannot fail is a defect.
+   *(BUILDER-PROPOSED, accepted by the owner -- not something they asked for. Added after
+   the builder caught itself writing unfalsifiable assertions, then did it three more
+   times: a `$?` captured after a command substitution, a grep matching its own
+   explanatory comment, and a guard unreachable on the author's machine. Where practical,
+   pair a guard with a control proving it can still fail.)*
 
 ## 5. Evidence From the Working Tree (auto-collected — context, not requirements)
 

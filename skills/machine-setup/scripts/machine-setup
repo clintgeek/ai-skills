@@ -68,6 +68,10 @@ done
 
 log() { echo "[machine-setup] $*"; }
 
+# Before anything is inspected or changed: this configures the invoking user's
+# account, and under sudo that is root rather than you.
+refuse_if_sudo || exit 1
+
 # --- 1 & 2: package manager, shells, login shell --------------------------
 log "step 1/4 + 2/4: package manager and shells"
 bs_bootstrap || log "  bootstrap incomplete; later steps may not work"

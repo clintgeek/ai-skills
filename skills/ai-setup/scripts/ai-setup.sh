@@ -46,6 +46,10 @@ log() {
   echo "[ai-setup] $*"
 }
 
+# This creates symlinks under $HOME and can write $AI_LAWS. Under sudo those
+# become root's, so refuse (see refuse_if_sudo in lib/fs-helpers.sh).
+refuse_if_sudo || exit 1
+
 link_skills() {
   local target="$1"
   if [[ -L "$target" && "$(readlink "$target")" == "$AI_SKILLS" ]]; then
