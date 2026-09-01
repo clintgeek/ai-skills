@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # Shared AI CLI tool registry for ai-setup and ai-battle.
 # Source this file; do not execute it directly.
+#
+# Requires associative arrays: bash 4+ or zsh. macOS ships bash 3.2 as
+# /bin/bash, so a caller that reaches this file through a bare `bash` on a
+# stock Mac lands here -- say so plainly rather than emitting a wall of
+# "declare: -A: invalid option" and exiting 2.
+if [ -n "${BASH_VERSION:-}" ] && [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+  echo "ai-tools.sh: needs bash 4+ or zsh for associative arrays; found bash $BASH_VERSION." >&2
+  echo "  macOS ships bash 3.2 as /bin/bash. Install a newer one (brew install bash)" >&2
+  echo "  and make sure its directory precedes /bin on PATH." >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 OS_KIND="linux"
 case "$(uname -s)" in

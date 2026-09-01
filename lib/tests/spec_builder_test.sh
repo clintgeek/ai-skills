@@ -10,7 +10,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SB="$SCRIPT_DIR/../spec_builder.sh"
-BR="$SCRIPT_DIR/../../ai-battle/scripts/battle_runner.sh"
+BR="$SCRIPT_DIR/../../skills/ai-battle/scripts/battle_runner.sh"
 
 PASS=0 FAIL=0
 check() { # check <description> <expected-rc> <actual-rc>
@@ -62,7 +62,15 @@ check "spec-less --dry-run with --no-spec exits 0" 0 $?
 
 echo "== F3: spec scaffolds before challenger selection =="
 # Strip AI CLIs from PATH; keep system tools so git/grep still work.
-NO_AI_PATH="/usr/bin:/bin"
+# Narrowing to /usr/bin:/bin alone would also demote `bash` to macOS's 3.2,
+# which cannot do associative arrays -- that fails the runner for the wrong
+# reason. Expose only the bash running this suite, via a dir holding nothing
+# else (the real bash dir may itself contain AI CLIs, e.g. agy in
+# /opt/homebrew/bin).
+BASH_ONLY_BIN="$WORK/.bash-only"
+mkdir -p "$BASH_ONLY_BIN"
+ln -s "$(command -v bash)" "$BASH_ONLY_BIN/bash"
+NO_AI_PATH="$BASH_ONLY_BIN:/usr/bin:/bin"
 PATH="$NO_AI_PATH" CALLING_AGENT=devin "$BR" >/dev/null 2>&1
 check "no spec + no AI CLIs: scaffold-and-stop exits 3 (not tool error 1)" 3 $?
 [[ -f TICKET-SPEC.md ]];                          assert "spec was scaffolded despite empty roster" $?

@@ -1,0 +1,63 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # ubuntu ships bash 5 and zsh is installable; macOS runners only have
+    # bash 3.2, which ai-tools.sh deliberately refuses (see its header).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update -qq && sudo apt-get install -y zsh
+
+      - name: Syntax check every shell script
+        run: |
+          fail=0
+          for f in $(git ls-files '*.sh'); do
+            bash -n "$f" || fail=1
+          done
+          for f in $(git ls-files '*.zsh'); do
+            zsh -n "$f" || fail=1
+          done
+          exit $fail
+
+      - name: spec_builder regression suite
+        run: ./lib/tests/spec_builder_test.sh
+
+      - name: battle_runner smoke test
+        run: ./skills/ai-battle/scripts/battle_runner.sh --list-tools
+
+      - name: ai-setup smoke test
+        run: |
+          ./skills/ai-setup/scripts/ai-setup.sh inventory
+          # An unknown tool must produce the friendly message, not an
+          # "unbound variable" abort under set -u.
+          out="$(./skills/ai-setup/scripts/ai-setup.sh hotwire definitely-not-a-tool 2>&1 || true)"
+          echo "$out"
+          case "$out" in
+            *"unbound variable"*) echo "FAIL: hotwire crashed on unknown tool" >&2; exit 1 ;;
+            *"no built-in path map"*) ;;
+            *) echo "FAIL: unexpected hotwire output" >&2; exit 1 ;;
+          esac
+
+      - name: machine-wizard dry-run
+        run: ./skills/machine-setup/scripts/machine-wizard.zsh --dry-run --repos-only < /dev/null
+
+      - name: Every skill dir has a SKILL.md with frontmatter
+        run: |
+          fail=0
+          for d in skills/*/; do
+            f="$d/SKILL.md"
+            [ -f "$f" ] || { echo "FAIL: $d has no SKILL.md" >&2; fail=1; continue; }
+            head -1 "$f" | grep -qx -- '---' || { echo "FAIL: $f has no frontmatter" >&2; fail=1; }
+            grep -qm1 '^name:' "$f" || { echo "FAIL: $f has no name:" >&2; fail=1; }
+            grep -qm1 '^description:' "$f" || { echo "FAIL: $f has no description:" >&2; fail=1; }
+          done
+          exit $fail
