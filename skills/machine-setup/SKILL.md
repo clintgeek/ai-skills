@@ -1,136 +1,115 @@
 ---
 name: machine-setup
-description: Bootstrap a new PC by interviewing the user about its role, suggesting common apps from a shared catalog, and letting them choose what to install. Also clones and initializes the user's personal config repos (~/.ai, ~/dotfiles) from a committed repos.conf. Use when the user says "set up a new machine", "what should I install on this computer", or "bootstrap my Mac/PC".
+description: Bootstrap a bare machine to the point where an AI agent can work — Homebrew on macOS, zsh as the login shell, a modern bash, the user's repos, and their chosen AI CLIs installed and hotwired to ~/.ai. Then set the machine up conversationally: work out what is already installed and install what the user actually wants, rather than reading it from a catalog. Use when the user says "set up a new machine", "bootstrap my Mac/PC", or "what should I install on this computer".
 ---
 
-# /machine-setup — New-Machine Bootstrap Wizard
+# /machine-setup — New-Machine Bootstrap, then Conversational Setup
 
-Use this skill when the user wants to set up a new computer and get suggestions for common apps, or when they want to run the machine-setup wizard.
+This skill has two halves, and the split matters.
+
+**The bootstrap is a script**, because it must run before zsh, before a modern
+bash, and before any agent exists. **The app setup is a conversation**, because
+you can look at the machine and reason about it, which beats any list this repo
+could freeze in a file.
 
 ## 1. Trigger phrases
 
-- "set up this new machine"
+- "set up this new machine" / "bootstrap my Mac"
 - "what should I install on this computer?"
-- "bootstrap my Mac/PC"
 - "install my dotfiles and apps on a new machine"
 - "run machine-setup"
 
-## 2. What it does
-
-The wizard at `skills/machine-setup/scripts/machine-wizard`:
-
-1. **Personal repos first** — clones or pulls the repos listed in `skills/machine-setup/repos.conf` (e.g. `~/.ai`, `~/dotfiles`). Runs any configured post-clone script (e.g. `dotfiles/install.sh`) after a fresh clone.
-2. **Interview** — asks the user what the machine is for and which categories of apps they want.
-3. **Recommends** — pre-selects a default checklist from `lib/app-catalog.zsh` based on role + categories.
-4. **Lets the user edit** — an interactive checklist where they can toggle
-   items on *and off* by number (so a mistaken removal is recoverable), add an
-   app id, a package name, or a raw install command with `+<text>`, `all` /
-   `none`, `list`, `help`, and `done`.
-5. **Installs** — runs the OS-appropriate install command for each selected app.
-6. **Reports** — prints what was installed, what was already present, what was
-   skipped (no installer for this OS), and what failed.
-
-## 3. How to run it
-
-Interactive mode (best in a terminal):
+## 2. The bootstrap script
 
 ```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard
+~/.ai/skills/machine-setup/scripts/machine-setup
 ```
 
-Non-interactive / repeatable mode:
+POSIX `sh`. Four steps, in dependency order:
+
+1. **Homebrew** (macOS) — Apple ships no package manager and everything
+   downstream needs one, so this is a hard prerequisite, not a nicety.
+2. **zsh + a modern bash**, and zsh set as the **login shell**. The login shell
+   defaults to the *system* zsh (`/bin/zsh`), not Homebrew's: a login shell under
+   `/opt/homebrew` locks the user out if that install disappears.
+   `BS_ZSH_PREFER=newest` opts into the newest one instead.
+3. **Repos** from `repos.conf` — pulls a checkout, clones into a free path, and
+   **refuses to touch anything else**. It will not move a real directory aside to
+   clone over it.
+4. **AI CLIs** — shows a roster, takes a selection, installs and hotwires them
+   via `ai-setup select`.
+
+Options:
+
+| Flag | Effect |
+| :--- | :--- |
+| `--clis <list>` | CLIs to install non-interactively: numbers and/or names, or `all` |
+| `--no-clis` | Skip the AI CLI step |
+| `--no-repos` | Skip the repo step |
+| `--yes` | Do not prompt |
+| `--dry-run` | Print every mutation, change nothing |
 
 ```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard \
-  --role dev,design \
-  --categories terminal,productivity,security \
-  --extras zoom,notion,neovim \
-  --extra-cmd 'brew tap foo/bar && brew install baz' \
-  --yes
+# Interactive: roster + prompt for the CLIs
+~/.ai/skills/machine-setup/scripts/machine-setup
+
+# Unattended
+~/.ai/skills/machine-setup/scripts/machine-setup --clis claude,devin --yes
+
+# Preview, touching nothing
+~/.ai/skills/machine-setup/scripts/machine-setup --dry-run
 ```
 
-**Roles** (`--role`, comma-separated, union): `dev`, `design`, `data`,
-`writing`, `gaming`, `admin`, `general`. Roles and categories are separate axes
-— a role is what the machine is *for*, a category is what *kind* of app it is —
-so `--role dev` and `--categories dev-tools` select different things.
+**Prerequisite: `git`.** You cloned this repo, so you have it.
 
-**Categories** (`--categories`, comma-separated): `cli`, `terminal`, `browser`,
-`productivity`, `security`, `media`, `dev-tools`, `cloud`, `communication`.
+## 3. After the bootstrap: set the machine up by talking
 
-**Extras** — two flags, because names and commands need different parsing:
+The script installs **no apps on purpose**. There is no catalog, no role
+taxonomy, and no checklist, because all three were worse than just looking:
 
-| Flag | For | Splitting |
-| :--- | :--- | :--- |
-| `--extras` | app ids and package names | comma-separated; repeatable |
-| `--extra-cmd` | one raw install command | never split; repeatable |
+- A committed `brew install` list goes stale. You can check what a package is
+  called *today*.
+- "Which apps does a design machine want?" is a judgment call that belongs to the
+  user, not to a tag in a file.
+- "Is it already installed?" is `command -v`, `brew list`, `ls /Applications` —
+  discovery, which is what you are for.
 
-An `--extras` entry that is not a catalog id is installed as a **package** via
-the local package manager, so custom app names are never silently dropped. An
-entry containing shell syntax or whitespace is run verbatim. Because `--extras`
-is comma-delimited, a command containing a comma is ambiguous and is **refused**
-with a pointer to `--extra-cmd` rather than being split into fragments.
+So when the user wants apps installed:
 
-For a headless VPS (CLI-only) and also hotwire already-installed AI CLIs:
-
-```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard \
-  --role admin \
-  --categories cli \
-  --ai \
-  --yes
-```
-
-`--ai` only **hotwires CLIs that are already installed**. Running a vendor's
-installer is a separate opt-in, because `ai-setup`'s own rule is "never run a
-tool installer unprompted":
-
-```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard --role admin --categories cli --ai-install --yes
-```
-
-Preview only:
-
-```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard --dry-run
-```
-
-Set up repos only:
-
-```bash
-~/.ai/skills/machine-setup/scripts/machine-wizard --repos-only --yes
-```
+1. **Ask what the machine is for**, in their words. Do not offer a fixed menu of
+   roles; ask what they will do with it and what they miss from their last setup.
+2. **Look before proposing.** Check what is already present — package manager
+   lists, `command -v`, `/Applications`, existing dotfiles. Never propose
+   installing something that is already there.
+3. **Propose a concrete plan** with the exact command per app, grouped so it is
+   skimmable. Say which are already installed and being skipped.
+4. **Get explicit confirmation before mutating anything.** One `y` for the whole
+   plan is fine; silence is not. This is the same contract the bootstrap script
+   enforces, and it does not lapse because a human is talking to you instead.
+5. **Install, then report** what succeeded, what was already present, what
+   failed, and what you skipped.
+6. **Offer to record durable choices.** A repo the user always wants belongs in
+   `repos.conf`, which is committed and travels to the next machine. An app list
+   does not — next time, look again.
 
 ## 4. Constraints
 
-- Never run the install step without an explicit `--yes` flag or a manual `y` confirmation in interactive mode.
-- If the user is not in a terminal and has not provided `--yes`, print the plan and tell them to run with `--yes` themselves.
-- The wizard uses the native package manager per OS (`brew`, `apt-get`, `winget`, etc.). It does not download binaries on its own.
-- On macOS there is no native package manager, so the `scripts/machine-wizard` wrapper bootstraps Homebrew first via `lib/bootstrap.sh` — without it every mac install command would fail. The same wrapper guarantees zsh, a bash 4+, and zsh as the login shell. It honors the wizard's `--yes` and `--dry-run`, so it never installs anything the wizard itself would have paused for.
-- Always invoke `scripts/machine-wizard` (the `sh` wrapper), not `machine-wizard.zsh` directly — the `.zsh` script assumes the bootstrapper has already run.
-- If `~/.ai` or `~/dotfiles` already exists and is a git repo, the wizard pulls instead of re-cloning.
-- After the wizard finishes, you may offer to run `ai-setup` to install and hotwire the AI CLI tools.
-- `--ai` hotwires only already-installed CLIs; `--ai-install` additionally runs each missing tool's installer. Never substitute one for the other — the second runs vendor scripts the user did not name.
+- Never install anything without an explicit `--yes` or a clear confirmation.
+- Never run a vendor's installer the user did not ask for. Installing an AI CLI
+  is the bootstrap's job *because the user picked it from the roster*.
+- Never move or delete an existing directory to make room. Report it and let the
+  user decide.
+- The login shell belongs to `lib/bootstrap.sh`. Do not let a third-party
+  installer change it (`oh-my-zsh`, for one, defaults to doing exactly that —
+  pass `CHSH=no`).
+- Prefer the package manager over `curl | sh`. When a project only ships a shell
+  installer, say so plainly before running it.
 
-## 5. Customizing the catalog
+## 5. What lives where
 
-- Re-runs are safe: an app already present is skipped, not reinstalled. "Present"
-  means *available* — a `/usr/bin` tool counts, so brew never installs a duplicate
-  of something the OS ships. Detection order is `APP_CHECK` override → package
-  manager → macOS app bundle (`APP_BUNDLE`) → command on `PATH` (`APP_BIN` maps
-  ids whose binary differs, e.g. `ripgrep` → `rg`). A raw `--extra-cmd` cannot be
-  inspected, so it always runs.
-- `zsh` is deliberately **extras-only**: no role, no category. `lib/bootstrap.sh`
-  already guarantees zsh, and preselecting `brew install zsh` was the only thing
-  putting a Homebrew zsh ahead of the system one on `PATH` — which let the
-  oh-my-zsh installer `chsh` onto a Homebrew-dependent login shell. Use
-  `--extras zsh` (with `BS_ZSH_PREFER=newest`) if you want a newer zsh than the
-  OS ships.
-- `oh-my-zsh` pins `CHSH=no`. Upstream defaults to changing your login shell; the
-  bootstrapper owns that decision.
-- Add new apps in `lib/app-catalog.zsh`. Each app needs `APP_NAME`, `APP_TAGS`
-  (categories, plus the special `base` tag for always-install), and usually
-  `APP_ROLES`. Every role in `VALID_ROLES` must appear on at least one app or it
-  silently selects nothing beyond `base` — `lib/tests/machine_setup_test.zsh`
-  asserts this, and the wizard warns at runtime.
-- Add or change personal repos in `skills/machine-setup/repos.conf`.
-- Both files are committed, so the same catalog travels to new machines.
+- `scripts/machine-setup` — the bootstrap (POSIX `sh`).
+- `repos.conf` — the user's repos. Committed, so it travels. Edit this when they
+  name a repo they always want.
+- `lib/bootstrap.sh` — brew / zsh / bash / login-shell logic, shared with the
+  other skills' wrappers.
+- `lib/fs-helpers.sh` — backup-before-replace, shared with `ai-setup`.

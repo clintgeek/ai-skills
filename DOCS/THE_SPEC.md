@@ -62,8 +62,8 @@ Both `ai-setup` and `ai-battle` source this file. It is the only place these val
 Repo-root `lib/` holds helper scripts shared across skills (as opposed to `skills/ai-setup/lib/ai-tools.sh`, which predates it and stays put for compatibility). Each is written to work both as a CLI and as a sourceable bash library. Current entries:
 
 - `lib/fs-helpers.sh` — `backup_path` and `ensure_dir`, in POSIX `sh` so the bash side (`ai-setup.sh`) and the zsh side (machine-setup) share ONE implementation instead of a copy each. `backup_path` moves anything real aside to `.bak-<timestamp>`, but removes a dangling symlink or a symlink already pointing inside `$AI_ROOT` — those hold no content, and backing them up left a new stale link on every re-run.
-- `lib/tests/` — `spec_builder_test.sh`, `bootstrap_test.sh`, and `machine_setup_test.zsh`. All three run in CI.
-- `lib/bootstrap.sh` — the shared machine bootstrapper, and the only file in the repo that is deliberately POSIX `sh`: it runs *before* the shells it installs are known to exist, so it cannot use them. Guarantees, in dependency order, Homebrew on macOS (Apple ships no package manager, so every `APP_INSTALL_MAC` entry depends on it), zsh, a bash 4+ (for `ai-tools.sh`'s associative arrays), and zsh as the login shell. Consumers are thin `#!/bin/sh` wrappers that source it and re-exec the real script: `skills/machine-setup/scripts/machine-wizard`, `skills/ai-setup/scripts/ai-setup`, `skills/ai-battle/scripts/ai-battle`. Honors `BS_ASSUME_YES` (the caller's `--yes`), `BS_DRY_RUN`, `BS_NO_CHSH`, and `BS_ZSH_PREFER`. Mutates nothing without consent; tested by `lib/tests/bootstrap_test.sh`.
+- `lib/tests/` — `spec_builder_test.sh`, `bootstrap_test.sh`, and `machine_setup_test.sh`. All three run in CI.
+- `lib/bootstrap.sh` — the shared machine bootstrapper, and the only file in the repo that is deliberately POSIX `sh`: it runs *before* the shells it installs are known to exist, so it cannot use them. Guarantees, in dependency order, Homebrew on macOS (Apple ships no package manager), zsh, a bash 4+ (for `ai-tools.sh`'s associative arrays), and zsh as the login shell. Consumers: `skills/machine-setup/scripts/machine-setup` (which IS the bootstrapper's product), plus thin `#!/bin/sh` wrappers that re-exec a bash script — `skills/ai-setup/scripts/ai-setup`, `skills/ai-battle/scripts/ai-battle`. Honors `BS_ASSUME_YES` (the caller's `--yes`), `BS_DRY_RUN`, `BS_NO_CHSH`, and `BS_ZSH_PREFER`. Mutates nothing without consent; tested by `lib/tests/bootstrap_test.sh`.
 - `lib/spec_builder.sh` — spec discovery (`find`), scaffolding (`build`), and find-or-scaffold (`ensure`). Scaffolds a DRAFT `TICKET-SPEC.md` pre-filled with neutral git evidence (branch, commits, diffstat, ticket IDs) and TODO requirement sections that must be filled from the original ticket/request — never reverse-engineered from the code. `--interactive` interviews the human at the terminal for the four sections and writes a banner-free spec when Intent and Requirements are answered. Consumers: `ai-battle`, and the `spec-builder` skill — a thin wrapper that makes the find→interview→write flow directly invocable as `/spec-builder` (any skill needing a spec should source the lib rather than copying the logic).
 - `lib/SPEC_INTERVIEW.md` — the spec interview protocol for AI agents, which have no TTY for `--interactive`. The agent interrogates the human section by section (proposing candidates only from the ticket/request/conversation, never the diff), writes the confirmed answers into the spec, deletes the DRAFT banner, and gets sign-off. Covers ticket-less repos, where the requesting conversation is the ticket: quote the original ask, confirm builder inferences explicitly, and capture the spec when the ask lands rather than at review time.
 
@@ -91,14 +91,13 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   ├── THE_SAGE_LAWS.md
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
-│   ├── app-catalog.zsh
 │   ├── bootstrap.sh
-│   ├── machine-setup.zsh
-│   ├── setup-helpers.zsh
+│   ├── fs-helpers.sh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
 │   └── tests/
 │       ├── bootstrap_test.sh
+│       ├── machine_setup_test.sh
 │       └── spec_builder_test.sh
 ├── skills/
 │   ├── spec-builder/
@@ -118,8 +117,7 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   │   ├── SKILL.md
 │   │   ├── repos.conf
 │   │   └── scripts/
-│   │       ├── machine-wizard     (sh wrapper: bootstrap + re-exec)
-│   │       └── machine-wizard.zsh
+│   │       └── machine-setup      (POSIX sh bootstrapper)
 │   └── ui-design/
 │       └── SKILL.md
 ```
@@ -140,14 +138,13 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   ├── THE_SAGE_LAWS.md
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
-│   ├── app-catalog.zsh
 │   ├── bootstrap.sh
-│   ├── machine-setup.zsh
-│   ├── setup-helpers.zsh
+│   ├── fs-helpers.sh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
 │   └── tests/
 │       ├── bootstrap_test.sh
+│       ├── machine_setup_test.sh
 │       └── spec_builder_test.sh
 ├── skills/
 │   ├── spec-builder/
@@ -167,8 +164,7 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   │   ├── SKILL.md
 │   │   ├── repos.conf
 │   │   └── scripts/
-│   │       ├── machine-wizard     (sh wrapper: bootstrap + re-exec)
-│   │       └── machine-wizard.zsh
+│   │       └── machine-setup      (POSIX sh bootstrapper)
 │   └── ui-design/
 │       └── SKILL.md
 ```

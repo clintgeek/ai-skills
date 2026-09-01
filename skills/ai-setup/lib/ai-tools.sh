@@ -167,3 +167,117 @@ discover_tools() {
   done
   return 0
 }
+
+# ---------------------------------------------------------------------------
+# Tool roster and selection (shared by ai-setup and ai-battle --connect)
+# ---------------------------------------------------------------------------
+# One implementation, because two would drift. NOTE this file is sourced by both
+# bash and zsh, and their arrays index differently (bash 0-based, zsh 1-based),
+# so nothing here indexes an array -- selections are resolved by iterating with
+# a counter instead.
+
+# Numbered roster with installed status.
+tool_roster() {
+  echo ""
+  echo "AI CLI roster (${OS_KIND})"
+  echo "-----------------------------------------------------------------"
+  local i=0 tool
+  for tool in "${AI_TOOLS[@]}"; do
+    i=$((i + 1))
+    if command -v "$tool" >/dev/null 2>&1; then
+      printf '  %2d) %-13s [installed]  %s\n' "$i" "$tool" "$(command -v "$tool")"
+    else
+      printf '  %2d) %-13s [missing]    %s\n' "$i" "$tool" "$(install_command "$tool")"
+    fi
+  done
+  echo "-----------------------------------------------------------------"
+}
+
+# Resolve free-form selection input into tool names, one per line.
+# Accepts numbers and/or names, comma and/or space separated, plus "all".
+# Unknown tokens are reported on stderr and skipped, never silently dropped.
+resolve_tool_selection() {
+  local raw="$1"
+  [[ -z "$raw" ]] && return 0
+  if [[ "$raw" == "all" ]]; then
+    printf '%s\n' "${AI_TOOLS[@]}"
+    return 0
+  fi
+  local tok i tool matched seen=""
+  # Normalize separators to spaces without needing an array index.
+  for tok in $(echo "$raw" | tr ',' ' '); do
+    [[ -z "$tok" ]] && continue
+    matched=""
+    case "$tok" in
+      ''|*[!0-9]*)
+        # A name.
+        for tool in "${AI_TOOLS[@]}"; do
+          [[ "$tool" == "$tok" ]] && { matched="$tool"; break; }
+        done ;;
+      *)
+        # A position in the roster.
+        i=0
+        for tool in "${AI_TOOLS[@]}"; do
+          i=$((i + 1))
+          [[ "$i" -eq "$tok" ]] && { matched="$tool"; break; }
+        done ;;
+    esac
+    if [[ -n "$matched" ]]; then
+      # Dedupe: selecting both "2" and "claude" must not install it twice.
+      case " $seen " in
+        *" $matched "*) ;;
+        *) seen="$seen $matched"; echo "$matched" ;;
+      esac
+    else
+      echo "  ignoring unrecognized selection: $tok" >&2
+    fi
+  done
+  return 0
+}
+
+# Install one tool, printing the command first. Returns 0 if it ends up present.
+# assume_yes=true installs without prompting; otherwise a TTY is asked and a
+# non-interactive session refuses (never install a vendor script unprompted).
+tool_install_one() {
+  local tool="$1" assume_yes="${2:-false}"
+  local cmd note answer
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "  $tool already installed at $(command -v "$tool")"
+    return 0
+  fi
+  cmd="$(install_command "$tool")"
+  note="$(install_note "$tool")"
+  if [[ -z "$cmd" ]]; then
+    echo "  no install command known for $tool" >&2
+    return 1
+  fi
+  echo ""
+  echo "  $tool:"
+  echo "    $cmd"
+  [[ -n "$note" ]] && echo "    $note"
+  if [[ "$cmd" == *"(PowerShell)"* ]]; then
+    echo "    (PowerShell only -- run this yourself in a PowerShell window)"
+    return 1
+  fi
+  if [[ "$assume_yes" != true ]]; then
+    if [[ -t 0 ]]; then
+      read -r -p "    Run it? [y/N] " answer
+      [[ "$answer" =~ ^[Yy]$ ]] || { echo "    skipped."; return 1; }
+    else
+      echo "    non-interactive and not pre-confirmed; skipped." >&2
+      return 1
+    fi
+  fi
+  echo "    installing $tool..."
+  if bash -c "$cmd"; then
+    hash -r 2>/dev/null || true
+    if command -v "$tool" >/dev/null 2>&1; then
+      echo "    $tool installed at $(command -v "$tool")"
+      return 0
+    fi
+    echo "    installer finished but $tool is not on PATH yet -- restart your shell" >&2
+    return 1
+  fi
+  echo "    install failed for $tool" >&2
+  return 1
+}

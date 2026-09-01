@@ -1,5 +1,22 @@
 # Specification: Add machine-setup skill
 
+> **SUPERSEDED (2026-09-01).** Requirements 1, 2, 5, 6, 10 and 11 below describe
+> an app catalog, a role/category taxonomy and an interactive checklist. All of
+> that has been deliberately **removed**. It encoded knowledge a model can look
+> up (install commands, package names, which apps suit which machine) and froze
+> it in a file that goes stale — and every self-inflicted bug in that subsystem
+> lived in it.
+>
+> `machine-setup` now does one job: bring a bare machine to the point where an
+> agent can work (Homebrew, zsh as login shell, a modern bash, repos, AI CLIs).
+> App installation is conversational, per `skills/machine-setup/SKILL.md`.
+>
+> Requirements 3, 4, 7, 8, 9 and 12 (committed repo list, post-clone script,
+> non-interactive mode, no-install-without-consent, reuse ai-setup's backup
+> pattern, final report) still hold and are still met.
+>
+> Kept as the historical record of why the code looked the way it did.
+
 ## 1. Intent
 Add a `machine-setup` skill that bootstraps a new PC by interviewing the user about what the machine is for, suggesting common apps, and letting them choose which to install (plus add custom ones). It must also clone and initialize the user's personal config repos (`~/.ai` and `~/dotfiles`) from a committed, versioned repo list so the same setup is repeatable on any new machine.
 

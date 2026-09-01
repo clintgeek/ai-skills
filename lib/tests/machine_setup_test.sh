@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Tests for skills/machine-setup/scripts/machine-setup, the bootstrap entry point.
+#
+# The app catalog, role taxonomy and checklist this used to test are gone --
+# deliberately. Those encoded knowledge a model can just look up, and every
+# self-inflicted bug in this subsystem lived in them. What remains is the part
+# that must be a guarantee rather than a recollection: POSIX purity, consent
+# gating, and refusing to touch a directory that is not ours.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MS="$REPO_ROOT/skills/machine-setup/scripts/machine-setup"
+
+PASS=0 FAIL=0
+check() { if [[ "$2" == "$3" ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1 (expected '$2', got '$3')" >&2; fi }
+assert() { if [[ "$2" -eq 0 ]]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  FAIL: $1" >&2; fi }
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/machine_setup_test.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT INT TERM
+
+echo "== POSIX purity =="
+# This runs before zsh and before bash 4 exist. It cannot use them.
+/bin/sh -n "$MS" >/dev/null 2>&1; assert "parses as POSIX sh" $?
+if command -v dash >/dev/null 2>&1; then
+  dash -n "$MS" >/dev/null 2>&1; assert "parses under dash (strict POSIX)" $?
+fi
+head -1 "$MS" | grep -qx -- '#!/bin/sh'; assert "declares #!/bin/sh" $?
+CODE="$WORK/ms.code.sh"
+# Strip comments AND single-quoted spans. A regex like '^REPO_PATH\[[a-z]+\]'
+# handed to grep contains "[[" but is not a bash conditional, and matching it
+# is a false alarm rather than a finding.
+sed -e "s/[[:space:]]*#.*$//" -e "s/'[^']*'/''/g" "$MS" > "$CODE"
+! grep -nE '\[\[|declare -|typeset -|\$\{[A-Za-z_]+\[|<<<|\blocal\b' "$CODE" >/dev/null
+assert "contains no bash/zsh-only constructs" $?
+# Prove the check can still fail, so it cannot rot into a no-op.
+printf 'if [[ x = x ]]; then :; fi\n' > "$WORK/bashism_probe.sh"
+grep -qE '\[\[' "$WORK/bashism_probe.sh"
+assert "  (control) the bashism check does detect [[ ]]" $?
+
+echo "== it does not install apps =="
+# The whole point of the rewrite. If a catalog comes back, this fails.
+! grep -qE 'brew install (git|jq|firefox|--cask)' "$MS"; assert "no app install commands in the script" $?
+[[ ! -f "$REPO_ROOT/lib/app-catalog.zsh" ]]; assert "no app catalog in the repo" $?
+
+echo "== dry run mutates nothing =="
+out="$("$MS" --dry-run --no-clis < /dev/null 2>&1)"
+assert "dry run succeeds" $?
+assert "  reaches the end" $(grep -q 'done\.' <<<"$out" && echo 0 || echo 1)
+assert "  reports no pending bootstrap mutations on a set-up machine" \
+  $(! grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1)
+out="$("$MS" --dry-run < /dev/null 2>&1)"
+assert "dry run does not run ai-setup for real" $(grep -q 'DRY RUN: would run: ai-setup select' <<<"$out" && echo 0 || echo 1)
+
+echo "== consent =="
+out="$("$MS" --dry-run --clis all < /dev/null 2>&1)"
+assert "--clis is passed through to ai-setup" $(grep -q 'ai-setup select --clis all' <<<"$out" && echo 0 || echo 1)
+assert "  and --yes is not invented when absent" $(! grep -q 'select --clis all --yes' <<<"$out" && echo 0 || echo 1)
+out="$("$MS" --dry-run --clis all --yes < /dev/null 2>&1)"
+assert "--yes is passed through when given" $(grep -q 'select --clis all --yes' <<<"$out" && echo 0 || echo 1)
+
+echo "== repo step refuses to touch what is not ours =="
+# A non-git directory at a configured path must be left alone, not backed up and
+# cloned over. Losing someone's ~/dotfiles is not a bootstrapper's call.
+assert "refuses a non-checkout path rather than moving it" \
+  $(grep -q 'is not a git checkout -- leaving it alone' "$MS" && echo 0 || echo 1)
+assert "  and says who decides" $(grep -q 'Move it aside yourself' "$MS" && echo 0 || echo 1)
+! grep -q 'backup_path' "$MS"; assert "  and never backs up a repo path on its own" $?
+
+echo "== flags =="
+"$MS" --help < /dev/null >/dev/null 2>&1; check "--help exits 0" 0 $?
+"$MS" --nonsense < /dev/null >/dev/null 2>&1; check "an unknown flag exits 1" 1 $?
+out="$("$MS" --dry-run --no-repos --no-clis < /dev/null 2>&1)"
+assert "--no-repos skips the repo step" $(grep -q 'repos (skipped)' <<<"$out" && echo 0 || echo 1)
+assert "--no-clis skips the CLI step" $(grep -qE 'AI CLIs$' <<<"$out" && echo 0 || echo 1)
+
+echo "== the CLI roster is shared, not duplicated =="
+# Line-anchored: a mention in a comment is not a definition.
+cd "$REPO_ROOT"
+for fn in tool_roster resolve_tool_selection tool_install_one; do
+  n=$(grep -rlE "^${fn}\(\)" $(git ls-files '*.sh' '*.zsh') 2>/dev/null | wc -l | tr -d ' ')
+  check "$fn is defined exactly once" 1 "$n"
+done
+out="$(bash -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; resolve_tool_selection '2, claude 11 bogus' 2>/dev/null | tr '\n' ' '")"
+check "selection resolves numbers, names and dedupes" "claude qwen " "$out"
+for sh in bash zsh; do
+  if command -v "$sh" >/dev/null 2>&1; then
+    o="$($sh -c "source '$REPO_ROOT/skills/ai-setup/lib/ai-tools.sh'; resolve_tool_selection '2' | tr -d '\n'")"
+    check "  same answer under $sh (arrays index differently)" "claude" "$o"
+  fi
+done
+
+echo ""
+echo "$PASS passed, $FAIL failed"
+[[ "$FAIL" -eq 0 ]]

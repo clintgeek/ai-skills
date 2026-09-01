@@ -146,100 +146,34 @@ fi
 # ---------------------------------------------------------------------------
 # OS_KIND is provided by ai-setup/lib/ai-tools.sh
 
-# install_command() is provided by ai-setup/lib/ai-tools.sh
+# install_command(), install_note(), tool_roster(), resolve_tool_selection()
+# and tool_install_one() are all provided by ai-setup/lib/ai-tools.sh
 
-# install_note() is provided by ai-setup/lib/ai-tools.sh
-
-print_connect_menu() {
-  echo ""
-  echo "🔌 AI-Battle Connect — challenger CLI roster ($OS_KIND)"
-  echo "-----------------------------------------------------------------"
-  local i=1 tool
-  for tool in "${KNOWN_TOOLS[@]}"; do
-    if command -v "$tool" >/dev/null 2>&1; then
-      printf '  %2d) %-13s ✓ installed  %s\n' "$i" "$tool" "$(command -v "$tool")"
-    else
-      printf '  %2d) %-13s ✗ missing    install: %s\n' "$i" "$tool" "$(install_command "$tool")"
-    fi
-    i=$((i + 1))
-  done
-  echo "-----------------------------------------------------------------"
-}
-
-connect_install() {
-  local tool="$1" cmd note answer
-  local known=false t
-  for t in "${KNOWN_TOOLS[@]}"; do [[ "$t" == "$tool" ]] && { known=true; break; }; done
-  if [[ "$known" != true ]]; then
-    echo "Unknown tool: $tool (known: ${KNOWN_TOOLS[*]})" >&2
-    return 1
-  fi
-  if command -v "$tool" >/dev/null 2>&1; then
-    echo "$tool is already installed at $(command -v "$tool")."
-    return 0
-  fi
-  cmd="$(install_command "$tool")"
-  note="$(install_note "$tool")"
-  echo ""
-  echo "To install $tool:"
-  echo "    $cmd"
-  [[ -n "$note" ]] && echo "    $note"
-  if [[ "$cmd" == *"(PowerShell)"* ]]; then
-    echo "This one must be run in PowerShell — copy it into a PowerShell window."
-    return 0
-  fi
-  if [[ "$ASSUME_YES" = true ]]; then
-    answer="y"
-  elif [[ -t 0 ]]; then
-    read -r -p "Run it now? [y/N] " answer
-  else
-    echo "(Non-interactive session: re-run with '--connect $tool --yes' to install, or run the command yourself.)"
-    return 0
-  fi
-  if [[ "$answer" =~ ^[Yy]$ ]]; then
-    echo "Installing $tool..."
-    if bash -c "$cmd"; then
-      hash -r 2>/dev/null || true
-      if command -v "$tool" >/dev/null 2>&1; then
-        echo "✓ $tool installed at $(command -v "$tool")."
-      else
-        echo "Installer finished, but '$tool' isn't on PATH yet — restart your shell or source your profile."
-      fi
-    else
-      echo "✗ Install command for $tool failed." >&2
-      return 1
-    fi
-  else
-    echo "Skipped."
-  fi
-  return 0
-}
-
+# The roster, selection parsing and assisted install all live in
+# ai-setup/lib/ai-tools.sh (tool_roster / resolve_tool_selection /
+# tool_install_one) and are shared with `ai-setup select`. There were two copies
+# of this menu; one drifts.
 run_connect() {
   if [[ -n "$CONNECT_TOOL" ]]; then
-    connect_install "$CONNECT_TOOL"
+    tool_install_one "$CONNECT_TOOL" "$ASSUME_YES"
     return $?
   fi
-  print_connect_menu
+  tool_roster
   if [[ ! -t 0 ]]; then
-    echo "(Non-interactive session: use '--connect <tool>' to get install help, add '--yes' to install.)"
+    echo "(Non-interactive: use '--connect <tool>' to get install help, add '--yes' to install.)"
     return 0
   fi
   local choice tool
   while true; do
-    read -r -p "Select a tool to install (number or name, q to quit): " choice
+    printf "Select challenger(s) to install (numbers/names, 'all', q to quit): "
+    read -r choice || break
     case "$choice" in
       q|Q|quit|exit|"") echo "Bye."; break ;;
-      *[!0-9]*) tool="$choice" ;;
-      *)
-        if (( choice >= 1 && choice <= ${#KNOWN_TOOLS[@]} )); then
-          tool="${KNOWN_TOOLS[choice-1]}"
-        else
-          echo "Pick 1-${#KNOWN_TOOLS[@]}."; continue
-        fi ;;
     esac
-    connect_install "$tool" || true
-    print_connect_menu
+    while IFS= read -r tool; do
+      [[ -n "$tool" ]] && tool_install_one "$tool" "$ASSUME_YES" || true
+    done < <(resolve_tool_selection "$choice")
+    tool_roster
   done
   return 0
 }

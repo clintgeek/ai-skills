@@ -1,0 +1,153 @@
+#!/bin/sh
+# machine-setup: bring a bare machine to the point where an AI agent can work.
+#
+# That is the WHOLE job. It does not install your apps, and it deliberately has
+# no app catalog: an agent with a shell can work out install commands and see
+# what is already present far better than a frozen list of `brew install` strings
+# ever could. Everything past the hand-off is the agent's, driven by SKILL.md.
+#
+# In dependency order:
+#   1. Homebrew          macOS ships no package manager; everything needs one
+#   2. zsh + modern bash zsh becomes the login shell
+#   3. repos             pull ~/.ai, clone the rest from repos.conf
+#   4. AI CLIs           pick from a roster, install and hotwire them
+#
+# POSIX sh on purpose: this is the one thing that must run before zsh, before
+# bash 4, and before any agent exists.
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+. "$REPO_ROOT/lib/bootstrap.sh"
+. "$REPO_ROOT/lib/fs-helpers.sh"
+
+CLIS=""
+DRY_RUN=""
+ASSUME_YES=""
+SKIP_REPOS=""
+SKIP_CLIS=""
+
+usage() {
+  cat << 'EOF'
+Usage: machine-setup [options]
+
+Brings a bare machine to the point where an AI agent can work: Homebrew (macOS),
+zsh + a modern bash, zsh as the login shell, your repos, and the AI CLIs.
+
+Options:
+  --clis <list>    AI CLIs to install, non-interactively: numbers and/or names
+                   (comma or space separated), or "all". Omit for a roster and
+                   a prompt.
+  --no-clis        Skip the AI CLI step entirely
+  --no-repos       Skip cloning/pulling repos from repos.conf
+  --yes            Do not prompt; install what is asked for
+  --dry-run        Print every mutation, change nothing
+  -h, --help       Show this message
+
+Prerequisite: git (you already have it -- you cloned this repo).
+
+Apps are NOT installed here. Once this finishes, ask your agent: it can see what
+the machine already has and install what you actually want.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --clis)
+      [ $# -lt 2 ] && { echo "Error: --clis requires an argument" >&2; exit 1; }
+      CLIS="$2"; shift 2 ;;
+    --no-clis)  SKIP_CLIS=1; shift ;;
+    --no-repos) SKIP_REPOS=1; shift ;;
+    --yes)      ASSUME_YES=1; BS_ASSUME_YES=1; export BS_ASSUME_YES; shift ;;
+    --dry-run)  DRY_RUN=1; BS_DRY_RUN=1; export BS_DRY_RUN; shift ;;
+    -h|--help)  usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+log() { echo "[machine-setup] $*"; }
+
+# --- 1 & 2: package manager, shells, login shell --------------------------
+log "step 1/4 + 2/4: package manager and shells"
+bs_bootstrap || log "  bootstrap incomplete; later steps may not work"
+
+# --- 3: repos -------------------------------------------------------------
+# Deliberately simple: pull if it is a checkout, clone if the path is free, and
+# refuse to touch anything else. Backing up someone's real directory to clone
+# over it is not a decision a bootstrapper should make on its own.
+setup_repos() {
+  [ -n "$SKIP_REPOS" ] && { log "step 3/4: repos (skipped)"; return 0; }
+  log "step 3/4: repos"
+  conf="$REPO_ROOT/skills/machine-setup/repos.conf"
+  if [ ! -f "$conf" ]; then
+    log "  no repos.conf; nothing to do"
+    return 0
+  fi
+  # repos.conf is zsh-shaped (associative arrays), so read it as data rather
+  # than sourcing it -- this script is POSIX sh.
+  grep -E '^REPO_(NAME|PATH|URL|POST_CLONE)\[' "$conf" | sed 's/^/  /' >/dev/null 2>&1 || true
+  ids=$(grep -oE '^REPO_PATH\[[a-zA-Z0-9_-]+\]' "$conf" | sed 's/REPO_PATH\[//;s/\]//')
+  for id in $ids; do
+    rpath=$(grep -E "^REPO_PATH\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
+    rurl=$(grep -E "^REPO_URL\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
+    rpost=$(grep -E "^REPO_POST_CLONE\[$id\]=" "$conf" | head -1 | sed 's/^[^=]*=//; s/^"//; s/"$//')
+    # Expand $HOME written literally in the config.
+    rpath=$(eval "echo \"$rpath\"")
+    [ -z "$rpath" ] && continue
+
+    if [ "$rpath" = "$REPO_ROOT" ]; then
+      log "  $id: this repo ($rpath), pulling"
+      [ -n "$DRY_RUN" ] || git -C "$rpath" pull --ff-only || log "    pull failed, continuing"
+      continue
+    fi
+    if [ -d "$rpath/.git" ]; then
+      log "  $id: pulling $rpath"
+      [ -n "$DRY_RUN" ] || git -C "$rpath" pull --ff-only || log "    pull failed, continuing"
+      continue
+    fi
+    if [ -e "$rpath" ] || [ -L "$rpath" ]; then
+      log "  $id: $rpath exists and is not a git checkout -- leaving it alone."
+      log "    Move it aside yourself if you want it cloned here."
+      continue
+    fi
+    log "  $id: cloning $rurl -> $rpath"
+    if [ -n "$DRY_RUN" ]; then continue; fi
+    if git clone "$rurl" "$rpath"; then
+      if [ -n "$rpost" ]; then
+        log "    post-clone: $rpost"
+        ( cd "$rpath" && eval "$rpost" ) || log "    post-clone failed"
+      fi
+    else
+      log "    clone failed"
+    fi
+  done
+}
+setup_repos
+
+# --- 4: AI CLIs -----------------------------------------------------------
+log "step 4/4: AI CLIs"
+if [ -n "$SKIP_CLIS" ]; then
+  log "  skipped"
+else
+  ai_setup="$REPO_ROOT/skills/ai-setup/scripts/ai-setup"
+  if [ ! -x "$ai_setup" ]; then
+    log "  $ai_setup missing; cannot install or hotwire CLIs"
+  elif [ -n "$DRY_RUN" ]; then
+    log "  DRY RUN: would run: ai-setup select${CLIS:+ --clis $CLIS}${ASSUME_YES:+ --yes}"
+  else
+    set -- select
+    [ -n "$CLIS" ] && set -- "$@" --clis "$CLIS"
+    [ -n "$ASSUME_YES" ] && set -- "$@" --yes
+    "$ai_setup" "$@" || log "  AI CLI step reported problems"
+  fi
+fi
+
+echo ""
+log "done."
+log "This machine has a package manager, zsh as its login shell, a modern bash,"
+log "your repos, and whichever AI CLIs you picked -- all hotwired to ~/.ai/skills."
+log ""
+log "Apps are not installed here, on purpose. Ask your agent instead: it can see"
+log "what is already present and install what you actually want. Start with:"
+log "  \"set up this machine for me -- see ~/.ai/skills/machine-setup/SKILL.md\""

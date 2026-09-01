@@ -81,30 +81,39 @@ List what was linked, what was already linked, what was backed up, and which too
 
 ### Quickstart
 
-1. Install one AI CLI — `devin` is the easiest:
+Two commands on a bare machine. **`git` is the only prerequisite** — and you
+need it to clone this anyway.
 
-   ```bash
-   curl -fsSL https://cli.devin.ai/install.sh | bash
-   ```
-
-2. Clone the repo:
+1. Clone the repo:
 
    ```bash
    git clone git@github.com:clintgeek/ai-skills.git ~/.ai
    ```
 
-3. Run the bootstrap:
+2. Run the bootstrap:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup inventory
-   ~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
+   ~/.ai/skills/machine-setup/scripts/machine-setup
    ```
 
-4. Verify:
+   It installs Homebrew (macOS), zsh + a modern bash, makes zsh your login
+   shell, clones the repos in `skills/machine-setup/repos.conf`, then shows you
+   a roster of AI CLIs and installs and hotwires the ones you pick.
+
+   Unattended: `machine-setup --clis claude,devin --yes`
+   Preview only: `machine-setup --dry-run`
+
+3. Verify:
 
    ```bash
-   devin skills list
+   devin skills list      # or: claude, and check /machine-setup is listed
    ```
+
+**Apps are not installed by the bootstrap, on purpose.** There is no app
+catalog — a committed list of `brew install` commands goes stale, and "is this
+already installed?" is something an agent can just check. Once bootstrapped,
+ask your agent to set the machine up; `skills/machine-setup/SKILL.md` tells it
+how (look first, propose a concrete plan, confirm before mutating).
 
 ### What the wiring actually looks like
 
@@ -180,6 +189,10 @@ BS_DRY_RUN=1 /bin/sh -c '. ~/.ai/lib/bootstrap.sh; bs_bootstrap'
   - `SKILL.md` — the battle prompt.
   - `scripts/ai-battle` — `sh` wrapper: bootstrap, then re-exec under bash 4+.
   - `scripts/battle_runner.sh` — the battle dispatcher.
+- `skills/machine-setup/` — bare-machine bootstrap.
+  - `SKILL.md` — the bootstrap contract, plus how to do app setup conversationally.
+  - `scripts/machine-setup` — POSIX `sh` bootstrapper (brew, zsh, bash, repos, CLIs).
+  - `repos.conf` — the repos to clone on a new machine. Committed, so it travels.
 - `skills/spec-builder/` — find or build a human-owned spec.
 - `skills/ui-design/` — frontend/UI design skill.
 - `LICENSE` — MIT.

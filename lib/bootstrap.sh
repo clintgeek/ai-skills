@@ -119,9 +119,9 @@ bs_pkg_install() {
 # ---------------------------------------------------------------------------
 # Homebrew (macOS)
 # ---------------------------------------------------------------------------
-# Apple ships no package manager, so on macOS brew is a hard prerequisite:
-# every APP_INSTALL_MAC entry in lib/app-catalog.zsh is a `brew install`.
-# Without this, a fresh Mac fails every single app install.
+# Apple ships no package manager, so on macOS brew is a hard prerequisite for
+# everything downstream -- installing zsh, installing a modern bash, and any app
+# an agent later decides to install. Without it a fresh Mac can do none of that.
 
 BS_BREW_INSTALLER='/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 

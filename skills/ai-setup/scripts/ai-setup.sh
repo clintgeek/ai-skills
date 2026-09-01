@@ -32,6 +32,10 @@ Commands:
                        Hotwire any tool with explicit paths
   install <tool> [--yes]
                        Show install command for a tool; --yes runs it
+  select [--clis <list>] [--yes]
+                       Show the AI CLI roster, pick one or more, install and
+                       hotwire them. <list> takes numbers and/or names (comma
+                       or space separated) or "all" for non-interactive use.
 
 Environment:
   AI_ROOT, AI_SKILLS, AI_LAWS, AI_REPO can override defaults.
@@ -178,6 +182,71 @@ cmd_hotwire_generic() {
   log "  $t hotwired"
 }
 
+# Interactive (or --clis) multi-select: pick AI CLIs, install them, hotwire them.
+# This is machine-setup's hand-off point -- installing the CLIs IS the job on a
+# fresh machine, so it gets a roster and a choice rather than installing four
+# vendors' scripts by fiat.
+cmd_select() {
+  local yes=false clis=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes) yes=true; shift ;;
+      --clis)
+        [[ $# -lt 2 ]] && { echo "Error: --clis requires an argument" >&2; exit 1; }
+        clis="$2"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) echo "Unknown select option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  log "select AI CLIs"
+  if [[ -z "$clis" ]]; then
+    tool_roster
+    if [[ ! -t 0 ]]; then
+      log "Non-interactive: pass --clis <numbers|names|all> to choose without a prompt."
+      return 0
+    fi
+    echo "Pick the CLIs to install and hotwire."
+    echo "Numbers and/or names, comma or space separated. 'all' for everything."
+    echo "Press Enter to install nothing and only hotwire what is already present."
+    printf "> "
+    read -r clis || clis=""
+  fi
+
+  local -a chosen
+  chosen=()
+  local t
+  while IFS= read -r t; do
+    [[ -n "$t" ]] && chosen+=("$t")
+  done < <(resolve_tool_selection "$clis")
+
+  # Nothing chosen: still hotwire every CLI already on the machine, which is the
+  # point of running this at all.
+  if [[ ${#chosen[@]} -eq 0 ]]; then
+    log "  no CLIs selected for install; hotwiring what is already installed"
+    for t in "${AI_TOOLS[@]}"; do
+      command -v "$t" >/dev/null 2>&1 || continue
+      [[ "${TOOL_KNOWN[$t]:-0}" -eq 1 ]] || { log "  $t installed but has no vetted path map; use hotwire-generic"; continue; }
+      cmd_hotwire "$t" || log "  hotwire of $t failed"
+    done
+    return 0
+  fi
+
+  local installed_any=false
+  for t in "${chosen[@]}"; do
+    if tool_install_one "$t" "$yes"; then
+      installed_any=true
+      if [[ "${TOOL_KNOWN[$t]:-0}" -eq 1 ]]; then
+        cmd_hotwire "$t" || log "  hotwire of $t failed"
+      else
+        log "  $t has no vetted path map; hotwire it with: ai-setup.sh hotwire-generic $t <skills> <laws>"
+      fi
+    fi
+  done
+  [[ "$installed_any" == true ]] || log "  nothing was installed"
+  return 0
+}
+
 cmd_install() {
   local t="" yes=false
   while [[ $# -gt 0 ]]; do
@@ -263,6 +332,9 @@ main() {
       ;;
     install)
       cmd_install "$@"
+      ;;
+    select)
+      cmd_select "$@"
       ;;
     -h|--help|help)
       usage

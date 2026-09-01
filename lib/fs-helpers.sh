@@ -2,11 +2,10 @@
 # Shared filesystem helpers: backup-before-replace and mkdir-if-missing.
 #
 # POSIX sh on purpose. This logic used to exist twice -- once in bash
-# (ai-setup.sh) and once in zsh (lib/setup-helpers.zsh, which used the zsh-only
-# `(( $+functions[log] ))` so the bash side could not have converged on it even
-# if someone tried). THE_SPEC forbids that duplication, and TICKET-SPEC Req 9
-# asks machine-setup to reuse ai-setup's backup pattern rather than retype it.
-# Keeping this POSIX is what lets one copy serve both callers.
+# (ai-setup.sh) and once in zsh (in the since-deleted lib/setup-helpers.zsh,
+# which used the zsh-only `(( $+functions[log] ))`, so the bash side could not
+# have converged on it even deliberately). THE_SPEC forbids that duplication.
+# Keeping this POSIX is what lets one copy serve every caller.
 #
 # Source it; it runs nothing on its own:
 #   . "$REPO_ROOT/lib/fs-helpers.sh"
