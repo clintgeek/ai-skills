@@ -44,11 +44,33 @@ echo "== it does not install apps =="
 [[ ! -f "$REPO_ROOT/lib/app-catalog.zsh" ]]; assert "no app catalog in the repo" $?
 
 echo "== dry run mutates nothing =="
+# Capture real state, not "is anything pending". A host whose login shell is
+# already zsh has nothing pending; a fresh box or CI runner legitimately has a
+# chsh pending. The guarantee is that NEITHER changes anything.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  shell_before="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')"
+else
+  shell_before="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)"
+fi
+shells_before="$(cksum /etc/shells 2>/dev/null | awk '{print $1}')"
+zprofile_before="$(cksum "$HOME/.zprofile" 2>/dev/null | awk '{print $1}' || echo none)"
+
 out="$("$MS" --dry-run --no-clis < /dev/null 2>&1)"
 assert "dry run succeeds" $?
 assert "  reaches the end" $(grep -q 'done\.' <<<"$out" && echo 0 || echo 1)
-assert "  reports no pending bootstrap mutations on a set-up machine" \
-  $(! grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1)
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  shell_after="$(dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null | awk '{print $2}')"
+else
+  shell_after="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)"
+fi
+shells_after="$(cksum /etc/shells 2>/dev/null | awk '{print $1}')"
+zprofile_after="$(cksum "$HOME/.zprofile" 2>/dev/null | awk '{print $1}' || echo none)"
+
+check "  login shell unchanged" "$shell_before" "$shell_after"
+check "  /etc/shells unchanged" "$shells_before" "$shells_after"
+check "  ~/.zprofile unchanged" "$zprofile_before" "$zprofile_after"
+assert "  and no command was executed" $(! grep -qE '^\s*\+ ' <<<"$out" && echo 0 || echo 1)
 out="$("$MS" --dry-run < /dev/null 2>&1)"
 assert "dry run does not run ai-setup for real" $(grep -q 'DRY RUN: would run: ai-setup select' <<<"$out" && echo 0 || echo 1)
 
