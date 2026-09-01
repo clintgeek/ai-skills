@@ -68,7 +68,7 @@ Add `--yes` to run the install command automatically:
 ~/.ai/skills/ai-setup/scripts/ai-setup install <tool> --yes
 ```
 
-The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-tools.sh`; both `ai-setup` and `ai-battle --connect` use the same source, so nothing is duplicated. Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
+The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-tools.sh`; both `ai-setup` and `ai-battle` use the same source, so nothing is duplicated. Do not auto-install without the user confirming the exact command. After a successful install, immediately hotwire that tool.
 
 ## 5. Re-run behavior
 

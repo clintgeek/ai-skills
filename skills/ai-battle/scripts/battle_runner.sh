@@ -24,8 +24,8 @@ CUSTOM_ROAST=""
 DRY_RUN=false
 ALLOW_SELF=false
 LIST_TOOLS=false
-CONNECT=false
-CONNECT_TOOL=""
+# Consumed by the sh wrapper for BOOTSTRAP consent (installing a bash 4+), not
+# by the battle itself. Accepted here so `ai-battle --yes` is not an error.
 ASSUME_YES=false
 TIMEOUT_SECS=900
 REPORT_FILE=""
@@ -63,12 +63,12 @@ Options:
   --allow-self          Permit the caller to battle its own CLI (defeats the
                         cross-model premise; off by default and refused loudly)
   --list-tools          Scan PATH for known AI CLIs, print what's installed, and exit
-  --connect [tool]      Open the challenger roster menu (like /connect): shows
-                        installed status for every known tool and assists with
-                        installing the one you pick. With a tool name, jumps
-                        straight to install help for that tool.
-  --yes                 With --connect <tool>: pre-confirm the displayed install
-                        command (for sessions where no prompt can be answered)
+  --yes                 Consent for the bootstrap wrapper (installing a bash 4+).
+                        Has no effect on the battle itself.
+
+To install a challenger, use ai-setup, which installs AND hotwires it:
+  ~/.ai/skills/ai-setup/scripts/ai-setup select
+  ~/.ai/skills/ai-setup/scripts/ai-setup select --clis codex --yes
   --dry-run             Print the generated prompt and execution command without running
   -h, --help            Show this help message
 
@@ -112,9 +112,6 @@ while [[ $# -gt 0 ]]; do
       TIMEOUT_SECS="$2"; shift 2 ;;
     --allow-self) ALLOW_SELF=true; shift ;;
     --list-tools) LIST_TOOLS=true; shift ;;
-    --connect)
-      CONNECT=true
-      if [[ $# -ge 2 && "$2" != -* ]]; then CONNECT_TOOL="$2"; shift 2; else shift; fi ;;
     --yes) ASSUME_YES=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help) show_help; exit 0 ;;
@@ -160,41 +157,7 @@ fi
 # install_command(), install_note(), tool_roster(), resolve_tool_selection()
 # and tool_install_one() are all provided by ai-setup/lib/ai-tools.sh
 
-# The roster, selection parsing and assisted install all live in
-# ai-setup/lib/ai-tools.sh (tool_roster / resolve_tool_selection /
-# tool_install_one) and are shared with `ai-setup select`. There were two copies
-# of this menu; one drifts.
-run_connect() {
-  if [[ -n "$CONNECT_TOOL" ]]; then
-    tool_install_one "$CONNECT_TOOL" "$ASSUME_YES"
-    return $?
-  fi
-  tool_roster
-  if [[ ! -t 0 ]]; then
-    echo "(Non-interactive: use '--connect <tool>' to get install help, add '--yes' to install.)"
-    return 0
-  fi
-  local choice tool
-  while true; do
-    printf "Select challenger(s) to install (numbers/names, 'all', q to quit): "
-    read -r choice || break
-    case "$choice" in
-      q|Q|quit|exit|"") echo "Bye."; break ;;
-    esac
-    while IFS= read -r tool; do
-      [[ -n "$tool" ]] && tool_install_one "$tool" "$ASSUME_YES" || true
-    done < <(resolve_tool_selection "$choice")
-    tool_roster
-  done
-  return 0
-}
-
 discover_tools
-
-if [[ "$CONNECT" = true ]]; then
-  run_connect
-  exit $?
-fi
 
 if [[ "$LIST_TOOLS" = true ]]; then
   echo "Known AI CLI tools: ${KNOWN_TOOLS[*]}"

@@ -144,7 +144,7 @@ discover_tools() {
 }
 
 # ---------------------------------------------------------------------------
-# Tool roster and selection (shared by ai-setup and ai-battle --connect)
+# Tool roster and selection (used by `ai-setup select`)
 # ---------------------------------------------------------------------------
 # One implementation, because two would drift. NOTE this file is sourced by both
 # bash and zsh, and their arrays index differently (bash 0-based, zsh 1-based),

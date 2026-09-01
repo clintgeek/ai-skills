@@ -6,8 +6,8 @@ description: >-
   strips AI sycophancy with ruthless adversarial framing, isolates context, attacks the implementation
   against requirements (scaffolding a DRAFT spec via the shared lib/spec_builder.sh when none exists,
   filled by interviewing the human per lib/SPEC_INTERVIEW.md before battle), and returns an evidence-backed scorecard plus the challenger's raw report,
-  pausing for human sign-off before any fixes. Also handles "connect"/"add a challenger" requests
-  via a /connect-style install menu (--connect).
+  pausing for human sign-off before any fixes. Points "connect"/"add a challenger" requests at `ai-setup select`.
+  Installing a challenger is `ai-setup select`.
 ---
 
 # /ai-battle — Cross-Model Adversarial Code Review
@@ -72,22 +72,26 @@ Family matters more than binary name: a Google-family caller (e.g., `agy`) is ne
 
 Run `battle_runner.sh --list-tools` to print which known tools are installed and their families. To pin a specific challenger, say so in natural language ("battle this against Devin") or pass `--opponent <tool>`.
 
-### Connect: growing the roster
+### Growing the roster
 
-`--connect` opens a `/connect`-style menu of every known challenger CLI with its installed status, and assists with installing whichever one is picked:
+Installing a challenger belongs to **`ai-setup`**, which installs *and* hotwires
+it — `ai-battle` had its own `--connect` menu doing half that job, and two
+commands for one task is one too many.
 
 ```bash
-# Interactive menu (in a terminal): pick by number or name, confirm, installed
-~/.ai/skills/ai-battle/scripts/ai-battle --connect
+# Roster with installed status, then pick one or more
+~/.ai/skills/ai-setup/scripts/ai-setup select
 
-# Show the install command for one tool
-~/.ai/skills/ai-battle/scripts/ai-battle --connect codex
-
-# Non-interactive install (agent-driven sessions): pre-confirms the command
-~/.ai/skills/ai-battle/scripts/ai-battle --connect codex --yes
+# Non-interactive: numbers and/or names, or "all"
+~/.ai/skills/ai-setup/scripts/ai-setup select --clis codex,copilot --yes
 ```
 
-When the user says "connect", "add a challenger", or "install <tool>", the agent should: (1) run `--connect` to show the roster, (2) let the **user** pick — never auto-install unprompted, (3) run `--connect <tool> --yes` once the user has chosen. Windows PowerShell installers (devin, claude, agy) are displayed but never auto-executed from bash — the user runs those themselves.
+When the user says "connect", "add a challenger", or "install <tool>": run
+`ai-setup select` to show the roster, let the **user** pick — never auto-install
+unprompted — then run it with `--clis <their choice> --yes`. Windows PowerShell
+installers are displayed but never auto-executed from a POSIX shell.
+
+`ai-battle --list-tools` still prints what is installed and each tool's family.
 
 ---
 

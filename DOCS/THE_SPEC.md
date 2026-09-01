@@ -244,7 +244,7 @@ Tools with unverified path maps (`codex`) must be hotwired with explicit paths v
 3. If the paths are verified, set `KNOWN=1`.
 4. Commit and push.
 
-`ai-battle --connect` and `ai-setup install <tool>` will immediately use the new entry.
+`ai-setup select` and `ai-setup install <tool>` will immediately use the new entry.
 
 ### 4.4 Re-running ai-setup
 
@@ -326,8 +326,7 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 | `--opponent <tool>` | Force a specific challenger |
 | `--report <file>` | Where to write the raw challenger report |
 | `--timeout <s>` | Kill the challenger after this many seconds |
-| `--connect [tool]` | Show install menu for a tool |
-| `--yes` | With `--connect`, pre-confirm install |
+| `--yes` | Bootstrap consent (installing a bash 4+); no effect on the battle |
 | `--list-tools` | List installed and missing AI CLIs |
 
 ### `spec_builder.sh` (shared, `lib/`)

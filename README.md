@@ -221,7 +221,7 @@ BS_DRY_RUN=1 /bin/sh -c '. ~/.ai/lib/bootstrap.sh; bs_bootstrap'
 
 ## Adding a new AI CLI to the registry
 
-Edit `skills/ai-setup/lib/ai-tools.sh` and add the binary, display name, family, install commands per OS, and best-guess skill/laws paths. Both `ai-setup` and `ai-battle --connect` will use it automatically.
+Edit `skills/ai-setup/lib/ai-tools.sh` and add the binary, display name, family, install commands per OS, and best-guess skill/laws paths. Both `ai-setup` and `ai-battle` use it automatically.
 
 ## .agents skills
 
