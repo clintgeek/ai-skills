@@ -61,6 +61,7 @@ Both `ai-setup` and `ai-battle` source this file. It is the only place these val
 
 Repo-root `lib/` holds helper scripts shared across skills (as opposed to `skills/ai-setup/lib/ai-tools.sh`, which predates it and stays put for compatibility). Each is written to work both as a CLI and as a sourceable bash library. Current entries:
 
+- `lib/bootstrap.sh` — the shared machine bootstrapper, and the only file in the repo that is deliberately POSIX `sh`: it runs *before* the shells it installs are known to exist, so it cannot use them. Guarantees, in dependency order, Homebrew on macOS (Apple ships no package manager, so every `APP_INSTALL_MAC` entry depends on it), zsh, a bash 4+ (for `ai-tools.sh`'s associative arrays), and zsh as the login shell. Consumers are thin `#!/bin/sh` wrappers that source it and re-exec the real script: `skills/machine-setup/scripts/machine-wizard`, `skills/ai-setup/scripts/ai-setup`, `skills/ai-battle/scripts/ai-battle`. Honors `BS_ASSUME_YES` (the caller's `--yes`), `BS_DRY_RUN`, `BS_NO_CHSH`, and `BS_ZSH_PREFER`. Mutates nothing without consent; tested by `lib/tests/bootstrap_test.sh`.
 - `lib/spec_builder.sh` — spec discovery (`find`), scaffolding (`build`), and find-or-scaffold (`ensure`). Scaffolds a DRAFT `TICKET-SPEC.md` pre-filled with neutral git evidence (branch, commits, diffstat, ticket IDs) and TODO requirement sections that must be filled from the original ticket/request — never reverse-engineered from the code. `--interactive` interviews the human at the terminal for the four sections and writes a banner-free spec when Intent and Requirements are answered. Consumers: `ai-battle`, and the `spec-builder` skill — a thin wrapper that makes the find→interview→write flow directly invocable as `/spec-builder` (any skill needing a spec should source the lib rather than copying the logic).
 - `lib/SPEC_INTERVIEW.md` — the spec interview protocol for AI agents, which have no TTY for `--interactive`. The agent interrogates the human section by section (proposing candidates only from the ticket/request/conversation, never the diff), writes the confirmed answers into the spec, deletes the DRAFT banner, and gets sign-off. Covers ticket-less repos, where the requesting conversation is the ticket: quote the original ask, confirm builder inferences explicitly, and capture the spec when the ask lands rather than at review time.
 
@@ -89,25 +90,34 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
 │   ├── app-catalog.zsh
+│   ├── bootstrap.sh
 │   ├── machine-setup.zsh
 │   ├── setup-helpers.zsh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
-│   └── tests/spec_builder_test.sh
+│   └── tests/
+│       ├── bootstrap_test.sh
+│       └── spec_builder_test.sh
 ├── skills/
 │   ├── spec-builder/
 │   │   └── SKILL.md
 │   ├── ai-battle/
 │   │   ├── SKILL.md
-│   │   └── scripts/battle_runner.sh
+│   │   └── scripts/
+│   │       ├── ai-battle          (sh wrapper: bootstrap + re-exec)
+│   │       └── battle_runner.sh
 │   ├── ai-setup/
 │   │   ├── SKILL.md
 │   │   ├── lib/ai-tools.sh
-│   │   └── scripts/ai-setup.sh
+│   │   └── scripts/
+│   │       ├── ai-setup           (sh wrapper: bootstrap + re-exec)
+│   │       └── ai-setup.sh
 │   ├── machine-setup/
 │   │   ├── SKILL.md
 │   │   ├── repos.conf
-│   │   └── scripts/machine-wizard
+│   │   └── scripts/
+│   │       ├── machine-wizard     (sh wrapper: bootstrap + re-exec)
+│   │       └── machine-wizard.zsh
 │   └── ui-design/
 │       └── SKILL.md
 ```
@@ -129,25 +139,34 @@ Before replacing anything, `ai-setup` moves the existing path to `<path>.bak-<ti
 │   └── global_rules.md -> THE_SAGE_LAWS.md
 ├── lib/
 │   ├── app-catalog.zsh
+│   ├── bootstrap.sh
 │   ├── machine-setup.zsh
 │   ├── setup-helpers.zsh
 │   ├── spec_builder.sh
 │   ├── SPEC_INTERVIEW.md
-│   └── tests/spec_builder_test.sh
+│   └── tests/
+│       ├── bootstrap_test.sh
+│       └── spec_builder_test.sh
 ├── skills/
 │   ├── spec-builder/
 │   │   └── SKILL.md
 │   ├── ai-battle/
 │   │   ├── SKILL.md
-│   │   └── scripts/battle_runner.sh
+│   │   └── scripts/
+│   │       ├── ai-battle          (sh wrapper: bootstrap + re-exec)
+│   │       └── battle_runner.sh
 │   ├── ai-setup/
 │   │   ├── SKILL.md
 │   │   ├── lib/ai-tools.sh
-│   │   └── scripts/ai-setup.sh
+│   │   └── scripts/
+│   │       ├── ai-setup           (sh wrapper: bootstrap + re-exec)
+│   │       └── ai-setup.sh
 │   ├── machine-setup/
 │   │   ├── SKILL.md
 │   │   ├── repos.conf
-│   │   └── scripts/machine-wizard
+│   │   └── scripts/
+│   │       ├── machine-wizard     (sh wrapper: bootstrap + re-exec)
+│   │       └── machine-wizard.zsh
 │   └── ui-design/
 │       └── SKILL.md
 ```
@@ -188,21 +207,21 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 3. Run `ai-setup` inventory:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+   ~/.ai/skills/ai-setup/scripts/ai-setup inventory
    ```
 
 4. Hotwire each installed tool:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
    ```
 
 5. Install missing tools (optional, with confirmation):
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup install <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup install <tool> --yes
+   ~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
    ```
 
 6. Verify:
@@ -241,13 +260,13 @@ Tools with unverified path maps (`agy`, `codex`, `opencode`, `goose`, `aider`, `
 `ai-battle` is an adversarial red-team review that uses this same tool registry to pick a challenger.
 
 ```bash
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --diff <range>
+~/.ai/skills/ai-battle/scripts/ai-battle --diff <range>
 ```
 
 When a spec exists (e.g. this file or a feature-specific spec), pass it with `--spec`:
 
 ```bash
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/THE_SPEC.md --diff main...HEAD
+~/.ai/skills/ai-battle/scripts/ai-battle --spec DOCS/THE_SPEC.md --diff main...HEAD
 ```
 
 If no spec is passed or found (`TICKET-SPEC.md`, `SPEC.md`, `*SPEC.md`, `*spec.md`), the runner scaffolds a DRAFT `TICKET-SPEC.md` via `lib/spec_builder.sh` and exits with code 3. The builder agent then interviews the human for the requirements (protocol: `lib/SPEC_INTERVIEW.md` — proposals may come from the ticket/request, never from the diff), writes the answers into the spec, deletes the DRAFT banner, and re-runs; a human at a terminal can run `spec_builder.sh ensure --interactive` instead. Specs with an intact DRAFT banner are refused; `--no-spec` is the explicit opt-out for battling without spec grounding.

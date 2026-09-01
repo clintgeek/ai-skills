@@ -71,6 +71,8 @@ Set up repos only:
 - Never run the install step without an explicit `--yes` flag or a manual `y` confirmation in interactive mode.
 - If the user is not in a terminal and has not provided `--yes`, print the plan and tell them to run with `--yes` themselves.
 - The wizard uses the native package manager per OS (`brew`, `apt-get`, `winget`, etc.). It does not download binaries on its own.
+- On macOS there is no native package manager, so the `scripts/machine-wizard` wrapper bootstraps Homebrew first via `lib/bootstrap.sh` — without it every mac install command would fail. The same wrapper guarantees zsh, a bash 4+, and zsh as the login shell. It honors the wizard's `--yes` and `--dry-run`, so it never installs anything the wizard itself would have paused for.
+- Always invoke `scripts/machine-wizard` (the `sh` wrapper), not `machine-wizard.zsh` directly — the `.zsh` script assumes the bootstrapper has already run.
 - If `~/.ai` or `~/dotfiles` already exists and is a git repo, the wizard pulls instead of re-cloning.
 - After the wizard finishes, you may offer to run `ai-setup` to install and hotwire the AI CLI tools.
 

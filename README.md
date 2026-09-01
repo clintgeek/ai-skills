@@ -10,7 +10,7 @@ If you are reading this, the human wants the environment set up. Do the followin
 
 ### 1. Verify this repo is at `~/.ai`
 
-This repo is expected to live at `~/.ai`. If it was checked out somewhere else, ask the user whether to move it to `~/.ai`. If they do not want to move it, use the actual checkout path in place of every `~/.ai` reference in the commands below; the `ai-setup.sh` script also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
+This repo is expected to live at `~/.ai`. If it was checked out somewhere else, ask the user whether to move it to `~/.ai`. If they do not want to move it, use the actual checkout path in place of every `~/.ai` reference in the commands below; the `ai-setup` script also honors `AI_SKILLS` and `AI_LAWS` if you prefer to export those instead.
 
 If `~/.ai` is not a git repo, clone it:
 
@@ -24,7 +24,7 @@ fi
 ### 2. Run the inventory
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/skills/ai-setup/scripts/ai-setup inventory
 ```
 
 This shows which of the 11 tracked AI CLIs are installed and which are already hotwired.
@@ -34,7 +34,7 @@ This shows which of the 11 tracked AI CLIs are installed and which are already h
 For each tool that shows `installed: yes`, run:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
 ```
 
 Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, `aider`, `cursor-agent`, `amp`, `qwen`.
@@ -42,7 +42,7 @@ Valid names: `devin`, `claude`, `agy`, `copilot`, `codex`, `opencode`, `goose`, 
 If a tool is installed but has no built-in path map, use `hotwire-generic` with paths the user provides, or ask before touching it:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire-generic <tool> <skills-path> <laws-path>
+~/.ai/skills/ai-setup/scripts/ai-setup hotwire-generic <tool> <skills-path> <laws-path>
 ```
 
 `hotwire` and `hotwire-generic` make timestamped `.bak` backups before replacing any existing skill/laws directories or files.
@@ -52,13 +52,13 @@ If a tool is installed but has no built-in path map, use `hotwire-generic` with 
 For any tool the user wants that is not installed:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool>
+~/.ai/skills/ai-setup/scripts/ai-setup install <tool>
 ```
 
 This prints the install command and notes. Only run it without confirming if the user explicitly told you to use the `--yes` flag:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh install <tool> --yes
+~/.ai/skills/ai-setup/scripts/ai-setup install <tool> --yes
 ```
 
 After a successful install, immediately run `hotwire <tool>`.
@@ -96,8 +96,8 @@ List what was linked, what was already linked, what was backed up, and which too
 3. Run the bootstrap:
 
    ```bash
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
-   ~/.ai/skills/ai-setup/scripts/ai-setup.sh hotwire <tool>
+   ~/.ai/skills/ai-setup/scripts/ai-setup inventory
+   ~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>
    ```
 
 4. Verify:
@@ -124,21 +124,61 @@ List what was linked, what was already linked, what was backed up, and which too
 `ai-setup` is idempotent. Just run:
 
 ```bash
-~/.ai/skills/ai-setup/scripts/ai-setup.sh inventory
+~/.ai/skills/ai-setup/scripts/ai-setup inventory
 ```
 
 and `hotwire` anything that is not yet linked. Backups are timestamped, so repeated runs never clobber the same `.bak`.
 
 ---
 
+## Bootstrapping a bare machine
+
+Every entry point is a `#!/bin/sh` wrapper over `lib/bootstrap.sh`, so a machine
+with nothing but `sh` and `git` can run them. In dependency order, the
+bootstrapper guarantees:
+
+1. **Homebrew** (macOS) — Apple ships no package manager and every mac install
+   command in the catalog is a `brew install`, so this is a hard prerequisite,
+   not a nicety. Added to `PATH` for the current process *and* persisted to
+   `~/.zprofile`.
+2. **zsh** — installed via the detected package manager if missing.
+3. **bash 4+** — `skills/ai-setup/lib/ai-tools.sh` uses associative arrays, and
+   macOS ships bash 3.2 permanently for licensing reasons. `lib/spec_builder.sh`
+   is deliberately bash-3.2-clean and needs none of this.
+4. **zsh as the login shell** — via `chsh`, adding it to `/etc/shells` first.
+
+It mutates nothing without consent: pass `--yes` (the wrappers forward it as
+`BS_ASSUME_YES`) or answer the prompt. Knobs:
+
+| Variable | Effect |
+| :--- | :--- |
+| `BS_ASSUME_YES=1` | Install without prompting |
+| `BS_DRY_RUN=1` | Print every mutation, change nothing |
+| `BS_NO_CHSH=1` | Install zsh but never touch the login shell |
+| `BS_ZSH_PREFER=newest` | Use the newest zsh as login shell instead of the system one |
+
+By default the login shell is set to the **system** zsh (`/bin/zsh` on macOS)
+rather than Homebrew's. A login shell living under `/opt/homebrew` locks you out
+if that install is ever removed or the volume is unmounted; `BS_ZSH_PREFER=newest`
+opts into it anyway. If your login shell is already some zsh, it is left alone.
+
+Preview what it would do to the machine you are on:
+
+```bash
+BS_DRY_RUN=1 /bin/sh -c '. ~/.ai/lib/bootstrap.sh; bs_bootstrap'
+```
+
 ## Repo layout
 
+- `lib/bootstrap.sh` — POSIX `sh` machine bootstrapper (brew, zsh, bash 4+, login shell). Sourced by every wrapper.
 - `skills/ai-setup/` — the setup skill and shared tool registry.
   - `SKILL.md` — the full prompt for an AI assistant.
+  - `scripts/ai-setup` — `sh` wrapper: bootstrap, then re-exec under bash 4+.
   - `scripts/ai-setup.sh` — the setup runner.
   - `lib/ai-tools.sh` — the 11-tool registry (binary, family, install commands, skill/laws paths). Both `ai-setup` and `ai-battle` source this.
 - `skills/ai-battle/` — adversarial cross-model code review skill.
   - `SKILL.md` — the battle prompt.
+  - `scripts/ai-battle` — `sh` wrapper: bootstrap, then re-exec under bash 4+.
   - `scripts/battle_runner.sh` — the battle dispatcher.
 - `skills/spec-builder/` — find or build a human-owned spec.
 - `skills/ui-design/` — frontend/UI design skill.

@@ -14,13 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install zsh
-        run: sudo apt-get update -qq && sudo apt-get install -y zsh
+      - name: Install zsh and dash
+        run: sudo apt-get update -qq && sudo apt-get install -y zsh dash
 
       - name: Syntax check every shell script
         run: |
           fail=0
+          # bootstrap.sh and the sh wrappers must stay POSIX; dash is strict.
+          for f in lib/bootstrap.sh $(git ls-files 'skills/*/scripts/*' | grep -v '\.' ); do
+            head -1 "$f" | grep -q '^#!/bin/sh' || continue
+            dash -n "$f" || fail=1
+          done
           for f in $(git ls-files '*.sh'); do
+            [ "$f" = lib/bootstrap.sh ] && continue
             bash -n "$f" || fail=1
           done
           for f in $(git ls-files '*.zsh'); do
@@ -28,11 +34,37 @@ jobs:
           done
           exit $fail
 
+      - name: bootstrap suite
+        run: ./lib/tests/bootstrap_test.sh
+
+      - name: bootstrap is a no-op on an already-provisioned machine
+        run: |
+          out="$(BS_DRY_RUN=1 /bin/sh -c '. ./lib/bootstrap.sh; bs_bootstrap')"
+          echo "$out"
+          # Nothing should be pending on a runner that already has zsh+bash 5.
+          if echo "$out" | grep -q 'DRY RUN'; then
+            echo "FAIL: bootstrap wants to mutate an already-provisioned machine" >&2
+            exit 1
+          fi
+
+      - name: bootstrap installs nothing without consent
+        run: |
+          # Non-interactive, no --yes: must decline rather than mutate.
+          out="$(/bin/sh -c '. ./lib/bootstrap.sh; BS_BASH_SEARCH=/nonexistent; export BS_BASH_SEARCH; PATH=/nonexistent; bs_ensure_bash; echo rc=$?' < /dev/null 2>&1)"
+          echo "$out"
+          echo "$out" | grep -q 'rc=1' || { echo "FAIL: expected refusal" >&2; exit 1; }
+          echo "$out" | grep -q 'non-interactive and no --yes' || { echo "FAIL: no reason given" >&2; exit 1; }
+
       - name: spec_builder regression suite
         run: ./lib/tests/spec_builder_test.sh
 
       - name: battle_runner smoke test
         run: ./skills/ai-battle/scripts/battle_runner.sh --list-tools
+
+      - name: sh wrappers re-exec correctly
+        run: |
+          ./skills/ai-battle/scripts/ai-battle --list-tools
+          ./skills/ai-setup/scripts/ai-setup inventory
 
       - name: ai-setup smoke test
         run: |

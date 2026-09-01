@@ -84,13 +84,13 @@ Run `battle_runner.sh --list-tools` to print which known tools are installed and
 
 ```bash
 # Interactive menu (in a terminal): pick by number or name, confirm, installed
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect
+~/.ai/skills/ai-battle/scripts/ai-battle --connect
 
 # Show the install command for one tool
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect goose
+~/.ai/skills/ai-battle/scripts/ai-battle --connect goose
 
 # Non-interactive install (agent-driven sessions): pre-confirms the command
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --connect goose --yes
+~/.ai/skills/ai-battle/scripts/ai-battle --connect goose --yes
 ```
 
 When the user says "connect", "add a challenger", or "install <tool>", the agent should: (1) run `--connect` to show the roster, (2) let the **user** pick — never auto-install unprompted, (3) run `--connect <tool> --yes` once the user has chosen. Windows PowerShell installers (devin, claude, agy) are displayed but never auto-executed from bash — the user runs those themselves.
@@ -180,22 +180,22 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 
 ```bash
 # Auto-detects caller and opponent, diffs HEAD~1 against spec
-~/.ai/skills/ai-battle/scripts/battle_runner.sh
+~/.ai/skills/ai-battle/scripts/ai-battle
 
 # Target specific spec and diff
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --spec DOCS/TICKET-SPEC.md --diff main...HEAD
+~/.ai/skills/ai-battle/scripts/ai-battle --spec DOCS/TICKET-SPEC.md --diff main...HEAD
 
 # Explicitly battle without spec grounding (weaker review, loud warning)
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --no-spec
+~/.ai/skills/ai-battle/scripts/ai-battle --no-spec
 
 # Force a specific opponent
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --opponent devin
+~/.ai/skills/ai-battle/scripts/ai-battle --opponent devin
 
 # Control where the raw report lands and how long the challenger may run
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --report battle.md --timeout 1200
+~/.ai/skills/ai-battle/scripts/ai-battle --report battle.md --timeout 1200
 
 # Dry-run to preview the prompt
-~/.ai/skills/ai-battle/scripts/battle_runner.sh --dry-run
+~/.ai/skills/ai-battle/scripts/ai-battle --dry-run
 ```
 
 Safety behavior built into the runner:

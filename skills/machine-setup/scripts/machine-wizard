@@ -1,26 +1,25 @@
 #!/bin/sh
-# Bootstrap for machine-wizard: installs zsh if missing, then runs the zsh wizard.
+# Bootstrap wrapper for machine-wizard.
+# Guarantees brew (macOS), zsh, and a modern bash exist -- and that zsh is the
+# login shell -- then runs the zsh wizard. All of that logic is shared:
+# lib/bootstrap.sh, which is POSIX sh precisely so it can run here, before the
+# shells it installs are known to exist.
 set -e
 
-if ! command -v zsh >/dev/null 2>&1; then
-  echo "[machine-wizard] zsh not found; installing..."
-  if command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update -qq && sudo apt-get install -y zsh
-  elif command -v dnf >/dev/null 2>&1; then
-    sudo dnf install -y zsh
-  elif command -v yum >/dev/null 2>&1; then
-    sudo yum install -y zsh
-  elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm zsh
-  elif command -v zypper >/dev/null 2>&1; then
-    sudo zypper install -y zsh
-  elif command -v apk >/dev/null 2>&1; then
-    sudo apk add --no-cache zsh
-  else
-    echo "[machine-wizard] No supported package manager found. Please install zsh and re-run." >&2
-    exit 1
-  fi
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec zsh "$SCRIPT_DIR/machine-wizard.zsh" "$@"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+. "$REPO_ROOT/lib/bootstrap.sh"
+
+# Mirror the wizard's own consent flags into the bootstrapper so it never
+# installs anything the wizard itself would have stopped to ask about.
+for arg in "$@"; do
+  case "$arg" in
+    --yes) BS_ASSUME_YES=1; export BS_ASSUME_YES ;;
+    --dry-run) BS_DRY_RUN=1; export BS_DRY_RUN ;;
+  esac
+done
+
+bs_bootstrap || bs_warn "bootstrap incomplete; the wizard may not be able to install everything"
+
+bs_exec_zsh "$SCRIPT_DIR/machine-wizard.zsh" "$@"

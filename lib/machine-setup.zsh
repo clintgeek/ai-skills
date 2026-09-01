@@ -17,6 +17,17 @@ log() {
 PKG_MGR=""
 detect_pkg_mgr() {
   local mgr
+  # macOS has no system package manager, so brew IS the package manager there.
+  # Every APP_INSTALL_MAC entry is a `brew install`, so without brew the mac
+  # install step cannot do anything at all.
+  if [[ "$OS_KIND" == "mac" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      PKG_MGR="brew"
+    else
+      PKG_MGR=""
+    fi
+    return 0
+  fi
   for mgr in apt-get apt dnf yum pacman zypper apk; do
     if command -v "$mgr" >/dev/null 2>&1; then
       PKG_MGR="$mgr"
@@ -25,7 +36,7 @@ detect_pkg_mgr() {
   done
   PKG_MGR=""
 }
-[[ "$OS_KIND" == "linux" ]] && detect_pkg_mgr
+detect_pkg_mgr
 
 linux_pkg_name() {
   local app="$1"
@@ -59,7 +70,16 @@ linux_install_cmd() {
 install_cmd() {
   local app="$1" cmd
   case "$OS_KIND" in
-    mac)     echo "${APP_INSTALL_MAC[$app]:-}" ;;
+    mac)
+      # Every mac entry is a brew command; with no brew there is nothing to run.
+      # scripts/machine-wizard bootstraps brew before we get here, but the .zsh
+      # wizard can also be invoked directly.
+      if [[ -z "$PKG_MGR" ]]; then
+        echo ""
+      else
+        echo "${APP_INSTALL_MAC[$app]:-}"
+      fi
+      ;;
     linux)
       cmd="${APP_INSTALL_LINUX[$app]:-}"
       if [[ -n "$cmd" ]]; then
@@ -160,10 +180,12 @@ setup_ai_clis() {
   local tool
   for tool in "${AI_TOOLS[@]}"; do
     if [[ "${TOOL_KNOWN[$tool]:-0}" -eq 1 ]]; then
+      # Go through the sh wrapper, not ai-setup.sh directly: it needs bash 4+
+      # and a fresh Mac only has bash 3.2 until the bootstrapper installs one.
       log "installing $tool if missing..."
-      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup.sh" install "$tool" --yes || log "  install of $tool failed"
+      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup" install "$tool" --yes || log "  install of $tool failed"
       log "hotwiring $tool..."
-      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup.sh" hotwire "$tool" || log "  hotwire of $tool failed"
+      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup" hotwire "$tool" || log "  hotwire of $tool failed"
     fi
   done
 }
