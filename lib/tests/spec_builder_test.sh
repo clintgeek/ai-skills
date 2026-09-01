@@ -41,6 +41,21 @@ echo "== core =="
 grep -q "Status: DRAFT" TICKET-SPEC.md;           assert "scaffold carries the DRAFT banner" $?
 grep -q "TEST-1" TICKET-SPEC.md;                  assert "scaffold collected ticket-id evidence" $?
 "$SB" build >/dev/null 2>&1;                      check "build refuses to overwrite without --force" 1 $?
+# The documented contract is "3 = what was written is still a DRAFT". This used
+# to be gated on --interactive, so a plain `build` reported success for a
+# TODO-only scaffold and a caller could treat a placeholder as a real spec.
+# Run in a scratch subdirectory: the checks below this block depend on $WORK
+# still holding an unfilled DRAFT, so this must not touch it.
+mkdir -p "$WORK/buildprobe" && pushd "$WORK/buildprobe" >/dev/null
+"$SB" build >/dev/null 2>&1;                      check "build of a DRAFT exits 3, not 0" 3 $?
+grep -q "Status: DRAFT" TICKET-SPEC.md;           assert "  and the file really is a draft" $?
+rm -f TICKET-SPEC.md
+bash -c "source '$SB'
+SPEC_INTENT='Filled.'
+SPEC_REQUIREMENTS='1. Filled.'
+_spec_builder_main build" >/dev/null 2>&1
+check "build of a complete spec exits 0" 0 $?
+popd >/dev/null
 
 echo "== F1: stale draft must not satisfy ensure =="
 "$SB" ensure >/dev/null 2>&1;                     check "ensure on an existing unfilled DRAFT exits 3" 3 $?

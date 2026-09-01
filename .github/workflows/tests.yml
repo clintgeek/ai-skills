@@ -21,12 +21,12 @@ jobs:
         run: |
           fail=0
           # bootstrap.sh and the sh wrappers must stay POSIX; dash is strict.
-          for f in lib/bootstrap.sh $(git ls-files 'skills/*/scripts/*' | grep -v '\.' ); do
+          for f in lib/bootstrap.sh lib/fs-helpers.sh $(git ls-files 'skills/*/scripts/*' | grep -v '\.' ); do
             head -1 "$f" | grep -q '^#!/bin/sh' || continue
             dash -n "$f" || fail=1
           done
           for f in $(git ls-files '*.sh'); do
-            [ "$f" = lib/bootstrap.sh ] && continue
+            case "$f" in lib/bootstrap.sh|lib/fs-helpers.sh) continue;; esac
             bash -n "$f" || fail=1
           done
           for f in $(git ls-files '*.zsh'); do
@@ -54,6 +54,12 @@ jobs:
           echo "$out"
           echo "$out" | grep -q 'rc=1' || { echo "FAIL: expected refusal" >&2; exit 1; }
           echo "$out" | grep -q 'non-interactive and no --yes' || { echo "FAIL: no reason given" >&2; exit 1; }
+
+      - name: backup_path/ensure_dir exist exactly once
+        run: |
+          n="$(grep -rn '^backup_path()\|^ensure_dir()' $(git ls-files '*.sh' '*.zsh') | wc -l | tr -d ' ')"
+          echo "definitions found: $n"
+          [ "$n" -eq 2 ] || { echo "FAIL: expected one backup_path and one ensure_dir" >&2; exit 1; }
 
       - name: spec_builder regression suite
         run: ./lib/tests/spec_builder_test.sh

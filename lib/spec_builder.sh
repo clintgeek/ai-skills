@@ -16,6 +16,8 @@
 #       without --force. With --interactive (terminal only), interviews the
 #       human for each section first; a spec whose Intent and Requirements were
 #       both answered is written WITHOUT the DRAFT banner (battle-ready).
+#       Exit 3 if what was written is still a DRAFT (the usual case without
+#       --interactive), 0 only for a battle-ready spec.
 #   spec_builder.sh ensure [--dir <path>] [--out <file>] [--diff <range>] [--title <text>] [--interactive]
 #       find, else build. Prints the spec path. Exit 0 if a COMPLETE spec
 #       already existed or the interview produced one; exit 3 if the spec that
@@ -298,8 +300,16 @@ _spec_builder_main() {
       fi
       build_spec_scaffold "$out" "$diff_target" "$title" "$force"
       echo "$out"
-      if [[ "$interactive" = true ]] && spec_is_draft "$out"; then
-        echo "Spec written, but it is still a DRAFT — Intent and/or Requirements were skipped." >&2
+      # Exit 3 whenever what we wrote is still a DRAFT, however we were called.
+      # This used to be gated on --interactive, so a plain `build` always
+      # scaffolded a TODO-only spec and reported success -- contradicting the
+      # documented exit codes and letting a caller treat a placeholder as done.
+      if spec_is_draft "$out"; then
+        if [[ "$interactive" = true ]]; then
+          echo "Spec written, but it is still a DRAFT — Intent and/or Requirements were skipped." >&2
+        else
+          echo "Scaffolded a DRAFT spec — fill sections 1–4 from the original ticket/request, then delete the DRAFT banner (or re-run with --interactive in a terminal)." >&2
+        fi
         return 3
       fi ;;
     ensure)

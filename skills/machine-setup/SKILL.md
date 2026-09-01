@@ -79,6 +79,14 @@ For a headless VPS (CLI-only) and also hotwire already-installed AI CLIs:
   --yes
 ```
 
+`--ai` only **hotwires CLIs that are already installed**. Running a vendor's
+installer is a separate opt-in, because `ai-setup`'s own rule is "never run a
+tool installer unprompted":
+
+```bash
+~/.ai/skills/machine-setup/scripts/machine-wizard --role admin --categories cli --ai-install --yes
+```
+
 Preview only:
 
 ```bash
@@ -100,6 +108,7 @@ Set up repos only:
 - Always invoke `scripts/machine-wizard` (the `sh` wrapper), not `machine-wizard.zsh` directly — the `.zsh` script assumes the bootstrapper has already run.
 - If `~/.ai` or `~/dotfiles` already exists and is a git repo, the wizard pulls instead of re-cloning.
 - After the wizard finishes, you may offer to run `ai-setup` to install and hotwire the AI CLI tools.
+- `--ai` hotwires only already-installed CLIs; `--ai-install` additionally runs each missing tool's installer. Never substitute one for the other — the second runs vendor scripts the user did not name.
 
 ## 5. Customizing the catalog
 

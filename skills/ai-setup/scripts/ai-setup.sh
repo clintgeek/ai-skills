@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 source "$SCRIPT_DIR/../lib/ai-tools.sh"
 
 # AI_ROOT is the repo checkout; skills live in its skills/ subdirectory and laws
@@ -14,7 +15,10 @@ AI_LAWS="${AI_LAWS:-$AI_ROOT/laws}"
 AI_REPO="${AI_REPO:-git@github.com:clintgeek/ai-skills.git}"
 GLOBAL_RULES="$AI_LAWS/global_rules.md"
 
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+# backup_path/ensure_dir are shared with machine-setup via POSIX sh rather than
+# retyped per language. Sourced after AI_ROOT is set: backup_path uses it to
+# tell our own symlinks (safe to replace) from someone else's (always backed up).
+source "$REPO_ROOT/lib/fs-helpers.sh"
 
 usage() {
   cat << 'EOF'
@@ -36,23 +40,6 @@ EOF
 
 log() {
   echo "[ai-setup] $*"
-}
-
-backup_path() {
-  local path="$1"
-  if [[ -e "$path" || -L "$path" ]]; then
-    local bak="${path}.bak-${TIMESTAMP}"
-    log "  backing up $path -> $bak"
-    mv "$path" "$bak"
-  fi
-}
-
-ensure_dir() {
-  local d="$1"
-  if [[ ! -d "$d" ]]; then
-    mkdir -p "$d"
-    log "  created $d"
-  fi
 }
 
 link_skills() {
@@ -136,9 +123,28 @@ cmd_inventory() {
   done
 }
 
+# The repo has to exist before anything is linked at it. Without this,
+# link_laws creates a starter $GLOBAL_RULES, which makes $AI_ROOT exist,
+# non-empty, and not a git checkout -- and machine-setup's setup_repos then
+# refuses to clone over it for good, permanently wedging the re-run path with
+# placeholder laws in place of THE_SAGE_LAWS. Fail loudly instead.
+require_repo() {
+  if [[ ! -d "$AI_SKILLS" ]]; then
+    log "  $AI_SKILLS does not exist -- the skills repo is not checked out."
+    log "  Clone it first:  ai-setup.sh clone"
+    log "  Refusing to link tools at a missing repo (that would strand them on"
+    log "  dangling symlinks and a placeholder laws file)."
+    exit 1
+  fi
+  if [[ ! -d "$AI_ROOT/.git" ]]; then
+    log "  warning: $AI_ROOT is not a git checkout; skills will not update with git pull"
+  fi
+}
+
 cmd_hotwire() {
   local t="$1"
   log "hotwire $t"
+  require_repo
   # Index the registry only through :- defaults: under `set -u` a bare
   # ${TOOL_SKILLS[$t]} on an unknown tool aborts with "unbound variable"
   # before the friendly message below can ever be printed.
@@ -162,6 +168,7 @@ cmd_hotwire_generic() {
   local skills="$2"
   local laws="$3"
   log "hotwire-generic $t"
+  require_repo
   if ! command -v "$t" >/dev/null 2>&1; then
     log "  $t not installed. Install it first."
     exit 1

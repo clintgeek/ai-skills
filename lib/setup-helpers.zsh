@@ -1,32 +1,14 @@
 #!/usr/bin/env zsh
 # Shared helpers for machine-setup.
+#
+# backup_path and ensure_dir now live in lib/fs-helpers.sh (POSIX sh) so the
+# bash side (ai-setup.sh) and the zsh side (machine-setup) share ONE
+# implementation. They used to be typed out twice with different timestamp
+# variables, and this file's zsh-only `(( $+functions[log] ))` meant bash could
+# not have converged on it. THE_SPEC forbids that duplication and TICKET-SPEC
+# Req 9 asks for reuse of ai-setup's pattern, not a copy of it.
+#
+# This file is kept as the stable include point for machine-setup.
 
-: "${BACKUP_TIMESTAMP:=$(date +%Y%m%d-%H%M%S)}"
-
-_log_helper() {
-  if (( $+functions[log] )); then
-    log "$@" >&2
-  else
-    echo "$@" >&2
-  fi
-}
-
-backup_path() {
-  local path="$1"
-  if [[ -e "$path" || -L "$path" ]]; then
-    local bak="${path}.bak-${BACKUP_TIMESTAMP}"
-    _log_helper "  backing up $path -> $bak"
-    mv "$path" "$bak"
-    echo "$bak"
-  else
-    echo ""
-  fi
-}
-
-ensure_dir() {
-  local d="$1"
-  if [[ ! -d "$d" ]]; then
-    mkdir -p "$d"
-    _log_helper "  created $d"
-  fi
-}
+: "${REPO_ROOT:?REPO_ROOT must be set before sourcing lib/setup-helpers.zsh}"
+source "$REPO_ROOT/lib/fs-helpers.sh"

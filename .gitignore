@@ -1,4 +1,6 @@
+# Backups are written as <path>.bak-<timestamp>, which *.bak alone does not match.
 *.bak
+*.bak-*
 
 # Environment and credentials
 .env

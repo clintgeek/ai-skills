@@ -16,6 +16,7 @@ YES=false
 DRY_RUN=false
 REPOS_ONLY=false
 AI=false
+AI_INSTALL=false
 
 typeset -a EXTRAS RAW_CMDS SELECTED_APPS INSTALLED SKIPPED FAILED
 EXTRAS=(); RAW_CMDS=(); SELECTED_APPS=(); INSTALLED=(); SKIPPED=(); FAILED=()
@@ -41,7 +42,10 @@ Options:
                          via the local package manager.
   --extra-cmd <command>  A raw install command, run verbatim. Repeatable.
                          Never split, so commas and shell syntax are safe.
-  --ai                   Also install and hotwire known AI CLIs
+  --ai                   Hotwire the known AI CLIs that are ALREADY installed
+  --ai-install           Also run the installer for missing AI CLIs (implies
+                         --ai; each installer is a vendor script, so this is
+                         opt-in rather than part of --ai)
   --yes                  Run without prompting
   --dry-run              Show plan, do not execute
   --repos-only           Set up personal repos only, skip app installs
@@ -93,6 +97,7 @@ parse_args() {
         [[ $# -lt 2 ]] && { echo "Error: --extra-cmd requires an argument" >&2; exit 1; }
         RAW_CMDS+=("$2"); shift 2 ;;
       --ai) AI=true; shift ;;
+      --ai-install) AI=true; AI_INSTALL=true; shift ;;
       --yes) YES=true; shift ;;
       --dry-run) DRY_RUN=true; shift ;;
       --repos-only) REPOS_ONLY=true; shift ;;
@@ -302,23 +307,26 @@ edit_checklist() {
 print_plan() {
   echo ""
   echo "=== Plan ==="
-  local id path post ts
+  # NOT `path`: see setup_repos in lib/machine-setup.zsh. zsh ties `path` to
+  # PATH, and clobbering it here made the `command -v` checks below report every
+  # installed AI CLI as missing.
+  local id repo_path post ts
   for id in "${MACHINE_REPOS[@]}"; do
-    path="${REPO_PATH[$id]:-}"
-    [[ -z "$path" ]] && continue
+    repo_path="${REPO_PATH[$id]:-}"
+    [[ -z "$repo_path" ]] && continue
     post="${REPO_POST_CLONE[$id]:-}"
-    if [[ -n "${REPO_ROOT:-}" && "$path" == "$REPO_ROOT" ]]; then
-      echo "  skip active repo ${REPO_NAME[$id]:-$id} -> $path"
+    if [[ -n "${REPO_ROOT:-}" && "$repo_path" == "$REPO_ROOT" ]]; then
+      echo "  skip active repo ${REPO_NAME[$id]:-$id} -> $repo_path"
       continue
     fi
-    if [[ -d "$path/.git" ]]; then
-      echo "  pull ${REPO_NAME[$id]:-$id} -> $path"
-    elif [[ -e "$path" || -L "$path" ]]; then
+    if [[ -d "$repo_path/.git" ]]; then
+      echo "  pull ${REPO_NAME[$id]:-$id} -> $repo_path"
+    elif [[ -e "$repo_path" || -L "$repo_path" ]]; then
       ts="${BACKUP_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
-      echo "  back up ${REPO_NAME[$id]:-$id} -> $path to ${path}.bak-${ts}, then clone"
+      echo "  back up ${REPO_NAME[$id]:-$id} -> $repo_path to ${repo_path}.bak-${ts}, then clone"
       [[ -n "$post" ]] && echo "    then run $post"
     else
-      echo "  clone ${REPO_NAME[$id]:-$id} -> $path"
+      echo "  clone ${REPO_NAME[$id]:-$id} -> $repo_path"
       [[ -n "$post" ]] && echo "    then run $post"
     fi
   done
@@ -335,8 +343,14 @@ print_plan() {
     local tool ai_cmd
     for tool in "${AI_TOOLS[@]}"; do
       if [[ "${TOOL_KNOWN[$tool]:-0}" -eq 1 ]]; then
-        ai_cmd="$(install_command "$tool")"
-        [[ -n "$ai_cmd" ]] && echo "  install AI CLI ${TOOL_NAME[$tool]:-$tool}: $ai_cmd"
+        if ! command -v "$tool" >/dev/null 2>&1; then
+          if [[ "$AI_INSTALL" != true ]]; then
+            echo "  skip AI CLI ${TOOL_NAME[$tool]:-$tool} (not installed; --ai-install to install)"
+            continue
+          fi
+          ai_cmd="$(install_command "$tool")"
+          [[ -n "$ai_cmd" ]] && echo "  install AI CLI ${TOOL_NAME[$tool]:-$tool}: $ai_cmd"
+        fi
         echo "  hotwire AI CLI ${TOOL_NAME[$tool]:-$tool}"
         echo "    back up ${TOOL_LAWS[$tool]:-$tool}, symlink laws -> ${AI_LAWS:-$HOME/.ai/laws}/global_rules.md"
         echo "    back up ${TOOL_SKILLS[$tool]:-$tool}, symlink skills -> ${AI_SKILLS:-$HOME/.ai/skills}"
@@ -378,7 +392,7 @@ execute_plan() {
       log "  failed to install $(item_label "$item")"
     fi
   done
-  [[ "$AI" == true ]] && setup_ai_clis
+  [[ "$AI" == true ]] && setup_ai_clis "$AI_INSTALL"
   return 0
 }
 
@@ -397,8 +411,9 @@ report() {
 main() {
   parse_args "$@"
   if [[ "$AI" == true && "$REPOS_ONLY" == true ]]; then
-    log "--ai is ignored with --repos-only"
+    log "--ai/--ai-install is ignored with --repos-only"
     AI=false
+    AI_INSTALL=false
   fi
   if [[ "$DRY_RUN" == true && "$REPOS_ONLY" != true && ( -z "$ROLES" || -z "$CATEGORIES" ) ]]; then
     ROLES="${ROLES:-general}"

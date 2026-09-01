@@ -42,6 +42,12 @@ The registry is:
 
 ## 3. Hotwire installed tools
 
+The repo must be checked out first: `hotwire` refuses to link a tool at a
+missing `~/.ai/skills`. Linking into nothing would leave the tool on dangling
+symlinks and cause a starter `global_rules.md` to be written, which makes
+`~/.ai` exist, non-empty, and not a git checkout — after which `machine-setup`
+will not clone over it and the laws stay a placeholder.
+
 For each installed tool:
 
 1. Back up any existing skill root to `<root>.bak-<timestamp>`.
@@ -74,7 +80,14 @@ The tool binary/family/install metadata lives in `~/.ai/skills/ai-setup/lib/ai-t
 `ai-setup` is idempotent:
 
 - Already-correct symlinks are skipped.
-- Broken symlinks are removed and recreated.
+- Dangling symlinks are removed and recreated (a broken link holds no content
+  worth preserving).
+- A symlink already pointing inside `~/.ai` is one of ours from an earlier run,
+  so it is replaced rather than backed up — otherwise every re-run left another
+  `.bak-<timestamp>` symlink behind.
+- Everything else — real files, real directories, and symlinks pointing
+  somewhere we do not own — is always moved to `.bak-<timestamp>`, never
+  deleted.
 - New skills added to `~/.ai` are picked up by all linked tools.
 - Backups are timestamped, so repeated runs never overwrite the same `.bak`.
 

@@ -31,6 +31,9 @@ assert() { # assert <desc> <rc>
   fi
 }
 
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/machine_setup_test.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT INT TERM
+
 # Load the libs directly for unit-level checks.
 REPO_ROOT="$REPO_ROOT" source "$REPO_ROOT/lib/machine-setup.zsh"
 
@@ -85,6 +88,87 @@ check "no bare (( x++ )) in set -e code paths" "" "${badinc[*]}"
 # And prove the wizard really does survive counting from zero.
 out="$(plan --role dev --categories cli)"
 assert "the plan runs to completion under set -e" $(grep -q 'Dry run, not executing' <<<"$out" && echo 0 || echo 1)
+
+echo "== zsh special variables are not used as scalars =="
+# zsh ties `path`, `fpath`, `cdpath`, `manpath` and friends to their PATH-style
+# colon lists. Using one as an ordinary local scalar silently replaces the real
+# variable for the rest of the function. This shipped: setup_repos did
+# `local id path` then `path=$HOME/dotfiles`, wiping PATH before every `git`
+# call, and print_plan did the same before its `command -v` checks.
+special_hits=()
+for f in "$REPO_ROOT/lib/machine-setup.zsh" "$REPO_ROOT/lib/app-catalog.zsh" \
+         "$REPO_ROOT/lib/setup-helpers.zsh" \
+         "$REPO_ROOT/skills/machine-setup/scripts/machine-wizard.zsh"; do
+  sed -e 's/[[:space:]]*#.*$//' "$f" \
+    | grep -qE '(^|[[:space:];])(local|typeset)[^;]*[[:space:]](path|fpath|cdpath|manpath|module_path|mailpath|infopath)([[:space:]]|$)|(^|[[:space:];])(path|fpath|cdpath|manpath|module_path|mailpath|infopath)=' \
+    && special_hits+=("${f:t}")
+done
+check "no zsh special variable used as a local scalar" "" "${special_hits[*]}"
+
+# And prove PATH survives INSIDE the functions that used to clobber it.
+# `local path` scopes the damage to the function body -- PATH is restored on
+# return -- which is exactly why this bug was invisible: the only code affected
+# is the code between the assignment and the end of the function, and that is
+# where git and command -v are called. So the probe must report from inside.
+cat > "$WORK/path_probe.zsh" <<'PROBE'
+set -euo pipefail
+source "$REPO_ROOT/lib/machine-setup.zsh"
+before="$PATH"
+# Same loop shape setup_repos uses, reporting from INSIDE the function.
+probe() {
+  local id repo_path
+  for id in "${MACHINE_REPOS[@]}"; do
+    repo_path="${REPO_PATH[$id]:-}"
+  done
+  [[ "$PATH" == "$before" ]] && echo INSIDE_SAME || echo INSIDE_CLOBBERED
+  command -v git >/dev/null 2>&1 && echo GIT_OK || echo GIT_LOST
+}
+probe
+PROBE
+out="$(REPO_ROOT="$REPO_ROOT" zsh "$WORK/path_probe.zsh" 2>&1)"
+assert "PATH survives inside the repo loop" $(grep -q INSIDE_SAME <<<"$out" && echo 0 || echo 1)
+assert "  and git is findable from inside it" $(grep -q GIT_OK <<<"$out" && echo 0 || echo 1)
+
+# Guard the guard: the old `path` spelling must FAIL this probe, or the test
+# would keep passing after a regression reintroduced the bug.
+sed 's/local id repo_path/local id path/; s/repo_path=/path=/' \
+  "$WORK/path_probe.zsh" > "$WORK/path_probe_bad.zsh"
+out_bad="$(REPO_ROOT="$REPO_ROOT" zsh "$WORK/path_probe_bad.zsh" 2>&1 || true)"
+assert "  (control) the old 'path' spelling really does break lookups" \
+  $(grep -qE 'INSIDE_CLOBBERED|GIT_LOST|command not found' <<<"$out_bad" && echo 0 || echo 1)
+
+# And the real thing: setup_repos itself must be able to find git.
+cat > "$WORK/setup_repos_probe.zsh" <<'PROBE'
+set -euo pipefail
+source "$REPO_ROOT/lib/machine-setup.zsh"
+# Neuter the mutations; we only care that command lookup still works in here.
+git() { command git "$@"; }
+MACHINE_REPOS=()
+setup_repos
+command -v git >/dev/null 2>&1 && echo GIT_OK || echo GIT_LOST
+PROBE
+out="$(REPO_ROOT="$REPO_ROOT" zsh "$WORK/setup_repos_probe.zsh" 2>&1 || true)"
+assert "setup_repos leaves command lookup working" $(grep -q GIT_OK <<<"$out" && echo 0 || echo 1)
+
+# The regression the bug actually caused: --ai reported installed CLIs missing.
+out="$(plan --role dev --categories cli --ai)"
+if command -v claude >/dev/null 2>&1; then
+  assert "--ai sees an installed CLI (claude) as installed" \
+    $(grep -q 'hotwire AI CLI Anthropic Claude Code' <<<"$out" && echo 0 || echo 1)
+  assert "  and does not claim it needs installing" \
+    $(! grep -q 'skip AI CLI Anthropic Claude Code' <<<"$out" && echo 0 || echo 1)
+else
+  echo "  (skipped: claude not installed on this machine)"
+fi
+
+echo "== --ai vs --ai-install consent split =="
+# ai-setup's SKILL.md says "Never run a tool installer unprompted"; --ai used to
+# run `install <tool> --yes` for all four known CLIs regardless.
+out="$(plan --role dev --categories cli --ai)"
+assert "--ai plans no installer runs" $(! grep -q 'install AI CLI' <<<"$out" && echo 0 || echo 1)
+assert "  and says how to opt in" $(grep -q -- '--ai-install to install' <<<"$out" && echo 0 || echo 1)
+out="$(plan --role dev --categories cli --ai-install)"
+assert "--ai-install plans installer runs for missing CLIs" $(grep -q 'install AI CLI' <<<"$out" && echo 0 || echo 1)
 
 echo "== P1-3: every valid role selects real apps =="
 VALID_ROLES=(dev design data writing gaming admin general)

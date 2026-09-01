@@ -233,48 +233,51 @@ add_extras() {
 }
 
 setup_repos() {
-  local id path url post was_cloned
+  # NOT `path`: zsh ties `path` to PATH, so `path=/some/dir` replaces PATH with
+  # that single directory for the rest of this function -- and every `git` call
+  # below would then fail with "command not found".
+  local id repo_path url post was_cloned
   for id in "${MACHINE_REPOS[@]}"; do
-    path="${REPO_PATH[$id]:-}"
+    repo_path="${REPO_PATH[$id]:-}"
     url="${REPO_URL[$id]:-}"
     post="${REPO_POST_CLONE[$id]:-}"
-    if [[ -z "$path" ]]; then
+    if [[ -z "$repo_path" ]]; then
       log "skipping repo $id: no path configured"
       continue
     fi
-    if [[ -n "${REPO_ROOT:-}" && "$path" == "$REPO_ROOT" ]]; then
-      log "skipping active repo $path"
+    if [[ -n "${REPO_ROOT:-}" && "$repo_path" == "$REPO_ROOT" ]]; then
+      log "skipping active repo $repo_path"
       continue
     fi
-    if [[ "$id" == "ai" && ! -d "$path/.git" && -d "$path" && -n "$(ls -A "$path" 2>/dev/null)" ]]; then
+    if [[ "$id" == "ai" && ! -d "$repo_path/.git" && -d "$repo_path" && -n "$(ls -A "$repo_path" 2>/dev/null)" ]]; then
       log "skipping $id repo ($path) because it exists, is not a git checkout, and may contain tool configs; please move or back it up manually"
       continue
     fi
     was_cloned=false
     local bak=""
-    if [[ -d "$path/.git" ]]; then
+    if [[ -d "$repo_path/.git" ]]; then
       log "pulling ${REPO_NAME[$id]:-$id}..."
-      git -C "$path" pull --ff-only || log "  pull failed, continuing"
+      git -C "$repo_path" pull --ff-only || log "  pull failed, continuing"
     else
-      if [[ -e "$path" || -L "$path" ]]; then
-        bak="$(backup_path "$path" 2>/dev/null)" || { log "  backup of $path failed, skipping"; continue; }
+      if [[ -e "$repo_path" || -L "$repo_path" ]]; then
+        bak="$(backup_path "$repo_path" 2>/dev/null)" || { log "  backup of $repo_path failed, skipping"; continue; }
       fi
       log "cloning ${REPO_NAME[$id]:-$id} to $path..."
-      if git clone "$url" "$path"; then
+      if git clone "$url" "$repo_path"; then
         was_cloned=true
       else
         log "  clone of ${REPO_NAME[$id]:-$id} failed"
         if [[ -n "$bak" ]]; then
-          log "  restoring $path from $bak"
-          rm -rf "$path"
-          mv "$bak" "$path"
+          log "  restoring $repo_path from $bak"
+          rm -rf "$repo_path"
+          mv "$bak" "$repo_path"
         fi
         continue
       fi
     fi
     if [[ "$was_cloned" == true && -n "$post" ]]; then
       log "running post-clone for ${REPO_NAME[$id]:-$id}: $post"
-      if (cd "$path" && eval "$post"); then
+      if (cd "$repo_path" && eval "$post"); then
         :
       else
         log "  post-clone for ${REPO_NAME[$id]:-$id} failed"
@@ -283,16 +286,31 @@ setup_repos() {
   done
 }
 
+# Hotwire the known AI CLIs, and optionally install the missing ones.
+#
+#   install_missing=false (--ai)         hotwire what is already installed
+#   install_missing=true  (--ai-install) also run each missing tool's installer
+#
+# These are deliberately separate. ai-setup's SKILL.md rule is "Never run a
+# tool installer unprompted", and --ai used to run `install <tool> --yes` for
+# all four known CLIs -- four vendor curl|bash installers the user never picked.
 setup_ai_clis() {
+  local install_missing="${1:-false}"
   local tool
+  # Go through the sh wrapper, not ai-setup.sh directly: it needs bash 4+ and a
+  # fresh Mac only has bash 3.2 until the bootstrapper installs one.
+  local ai_setup="$REPO_ROOT/skills/ai-setup/scripts/ai-setup"
   for tool in "${AI_TOOLS[@]}"; do
-    if [[ "${TOOL_KNOWN[$tool]:-0}" -eq 1 ]]; then
-      # Go through the sh wrapper, not ai-setup.sh directly: it needs bash 4+
-      # and a fresh Mac only has bash 3.2 until the bootstrapper installs one.
-      log "installing $tool if missing..."
-      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup" install "$tool" --yes || log "  install of $tool failed"
-      log "hotwiring $tool..."
-      "$REPO_ROOT/skills/ai-setup/scripts/ai-setup" hotwire "$tool" || log "  hotwire of $tool failed"
+    [[ "${TOOL_KNOWN[$tool]:-0}" -eq 1 ]] || continue
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      if [[ "$install_missing" != true ]]; then
+        log "$tool not installed; skipping (pass --ai-install to install it)"
+        continue
+      fi
+      log "installing $tool..."
+      "$ai_setup" install "$tool" --yes || { log "  install of $tool failed"; continue; }
     fi
+    log "hotwiring $tool..."
+    "$ai_setup" hotwire "$tool" || log "  hotwire of $tool failed"
   done
 }
