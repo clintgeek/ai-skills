@@ -72,9 +72,30 @@ out="$(bs 'bs_find_bash')"
 assert "finds a bash 4+ on this machine (got '$out')" $([[ -n "$out" ]] && echo 0 || echo 1)
 maj="$("$out" -c 'echo ${BASH_VERSINFO[0]}')"
 assert "the bash it found really is >= 4 (major $maj)" $([[ "$maj" -ge 4 ]] && echo 0 || echo 1)
-# Point the search at bash 3.2 only: it must report "none found", not accept it.
-bs 'BS_BASH_SEARCH=/bin/bash; export BS_BASH_SEARCH; PATH=/usr/bin:/bin; bs_find_bash' >/dev/null 2>&1
-assert "rejects bash 3.2 when it is the only candidate" $([[ $? -ne 0 ]] && echo 0 || echo 1)
+# The old version of this test pointed the search at /bin/bash and relied on it
+# being 3.2 -- true on macOS, false on Linux, where /bin/bash is 5.x and
+# accepting it is correct. Use a stub that reports major version 3 so the
+# rejection logic is exercised identically everywhere.
+OLDBASH="$WORK/oldbash"
+mkdir -p "$OLDBASH"
+cat > "$OLDBASH/bash" <<'STUB'
+#!/bin/sh
+# Pretends to be bash 3.2 for the one query bs_find_bash makes.
+case "$2" in
+  *BASH_VERSINFO*) echo 3 ;;
+  *BASH_VERSION*)  echo "3.2.57(1)-release" ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$OLDBASH/bash"
+bs "BS_BASH_SEARCH='$OLDBASH/bash'; export BS_BASH_SEARCH; PATH='$OLDBASH'; bs_find_bash" >/dev/null 2>&1
+assert "rejects a bash reporting major version 3" $([[ $? -ne 0 ]] && echo 0 || echo 1)
+# Guard the guard: the same stub reporting 5 must be ACCEPTED, or the test above
+# would pass even if bs_find_bash rejected everything.
+sed 's/echo 3 ;;/echo 5 ;;/' "$OLDBASH/bash" > "$OLDBASH/newbash"
+chmod +x "$OLDBASH/newbash"
+out="$(bs "BS_BASH_SEARCH='$OLDBASH/newbash'; export BS_BASH_SEARCH; PATH='$OLDBASH'; bs_find_bash")"
+assert "  (control) accepts a bash reporting major version 5" $([[ -n "$out" ]] && echo 0 || echo 1)
 
 echo "== consent: nothing mutates without --yes =="
 # Non-interactive, no BS_ASSUME_YES, no BS_DRY_RUN: must decline, not act.
@@ -93,20 +114,44 @@ assert "bs_run_sh under BS_DRY_RUN does not run the command" $([[ ! -e "$CANARY"
 bs "bs_run touch '$CANARY'" >/dev/null
 assert "bs_run without BS_DRY_RUN does run the command" $([[ -e "$CANARY" ]] && echo 0 || echo 1)
 
-echo "== full bootstrap is idempotent here =="
+echo "== full bootstrap under dry run =="
 out="$(bs 'BS_DRY_RUN=1; export BS_DRY_RUN; bs_bootstrap; echo "rc=$?"')"
-assert "dry-run bootstrap succeeds on a set-up machine" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
-assert "  reports no pending mutations" $(! grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1)
+assert "dry-run bootstrap succeeds" $(grep -q 'rc=0' <<<"$out" && echo 0 || echo 1)
+# The invariant is "changes nothing", NOT "has nothing to change". On a host
+# whose login shell is already zsh there is nothing pending; on a CI runner
+# (login shell /bin/bash) a chsh is legitimately pending. Both are correct --
+# what must never happen is an actual mutation.
+login_now="$(bs 'bs_current_login_shell')"
+case "$login_now" in
+  */zsh)
+    assert "  a fully provisioned host has nothing pending ($login_now)" \
+      $(! grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1) ;;
+  *)
+    assert "  an unprovisioned host reports the login-shell change as pending ($login_now)" \
+      $(grep -q 'DRY RUN' <<<"$out" && echo 0 || echo 1) ;;
+esac
+assert "  and the login shell is unchanged afterwards" \
+  $([[ "$(bs 'bs_current_login_shell')" == "$login_now" ]] && echo 0 || echo 1)
+assert "  and no chsh was actually executed" $(! grep -qE '^\s*\+ sudo chsh' <<<"$out" && echo 0 || echo 1)
 
 echo "== login shell =="
 out="$(bs 'bs_current_login_shell')"
 assert "reads the current login shell (got '$out')" $([[ -n "$out" ]] && echo 0 || echo 1)
 out="$(bs 'bs_preferred_login_zsh')"
 assert "picks a preferred login zsh (got '$out')" $([[ -x "$out" ]] && echo 0 || echo 1)
-# An already-zsh login shell must not be switched just to chase a newer build.
-out="$(bs 'BS_ZSH_PREFER=system; export BS_ZSH_PREFER; bs_ensure_zsh_default')"
-assert "leaves an existing zsh login shell alone" $(grep -qE 'already (zsh|/)' <<<"$out" && echo 0 || echo 1)
-assert "  and runs no chsh" $(! grep -q 'chsh -s' <<<"$out" && echo 0 || echo 1)
+# Behaviour depends on what the host's login shell actually is, and both
+# branches are correct -- so assert the right one rather than assuming macOS.
+out="$(bs 'BS_DRY_RUN=1; export BS_DRY_RUN; BS_ZSH_PREFER=system; export BS_ZSH_PREFER; bs_ensure_zsh_default')"
+case "$(bs 'bs_current_login_shell')" in
+  */zsh)
+    # An already-zsh login shell must not be switched to chase a newer build.
+    assert "leaves an existing zsh login shell alone" \
+      $(grep -qE 'already (zsh|/)' <<<"$out" && echo 0 || echo 1) ;;
+  *)
+    assert "proposes zsh when the login shell is not zsh" \
+      $(grep -q 'login shell:' <<<"$out" && echo 0 || echo 1) ;;
+esac
+assert "  and never executes chsh for real here" $(! grep -qE '^\s*\+ sudo chsh' <<<"$out" && echo 0 || echo 1)
 out="$(bs 'BS_NO_CHSH=1; export BS_NO_CHSH; bs_ensure_zsh_default')"
 assert "BS_NO_CHSH suppresses the login-shell change" $(grep -q 'leaving it alone' <<<"$out" && echo 0 || echo 1)
 # /etc/shells already lists the target, so this must be a no-op, not a sudo call.
