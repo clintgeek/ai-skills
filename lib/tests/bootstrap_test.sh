@@ -344,6 +344,31 @@ out="$(bs 'bs_current_login_shell')"
 assert "reads the current login shell (got '$out')" $([[ -n "$out" ]] && echo 0 || echo 1)
 out="$(bs 'bs_preferred_login_zsh')"
 assert "picks a preferred login zsh (got '$out')" $([[ -x "$out" ]] && echo 0 || echo 1)
+
+# The default must prefer a SYSTEM zsh: a login shell under /opt/homebrew locks
+# the user out if that install is removed.
+out="$(bs 'bs_preferred_login_zsh')"
+case "$out" in
+  /bin/zsh|/usr/bin/zsh) rc=0 ;;
+  *) rc=$([[ -x /bin/zsh || -x /usr/bin/zsh ]] && echo 1 || echo 0) ;;
+esac
+assert "  the default prefers a system zsh when one exists (got '$out')" "$rc"
+
+# With no system zsh, it falls back to whatever PATH has rather than nothing.
+out="$(bs 'BS_SYSTEM_ZSH_SEARCH=/nonexistent; export BS_SYSTEM_ZSH_SEARCH; bs_preferred_login_zsh')"
+assert "  with no system zsh, falls back to PATH (got '$out')" $([[ -x "$out" ]] && echo 0 || echo 1)
+
+# 'path' and its legacy alias 'newest' both take whatever PATH prefers.
+p1="$(bs 'BS_ZSH_PREFER=path; export BS_ZSH_PREFER; bs_preferred_login_zsh')"
+p2="$(bs 'BS_ZSH_PREFER=newest; export BS_ZSH_PREFER; bs_preferred_login_zsh')"
+check "BS_ZSH_PREFER=path and =newest agree" "$p1" "$p2"
+check "  and match command -v zsh" "$(command -v zsh)" "$p1"
+
+# The version-ranking helper is gone: it compared MAJOR versions only, so 5.9
+# and 5.0 tied and the tie broke on path order, and `command -v zsh` was
+# appended after the search list so the PATH zsh won regardless.
+! grep -q 'bs_zsh_candidates' "$BS"
+assert "  the misleading version ranking is gone" $?
 # Behaviour depends on what the host's login shell actually is, and both
 # branches are correct -- so assert the right one rather than assuming macOS.
 out="$(bs 'BS_DRY_RUN=1; export BS_DRY_RUN; BS_ZSH_PREFER=system; export BS_ZSH_PREFER; bs_ensure_zsh_default')"

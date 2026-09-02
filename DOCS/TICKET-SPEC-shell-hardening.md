@@ -104,7 +104,7 @@ correct and complete — from the code, not from these statements.
    `/etc/shells` first, and an existing zsh login shell must not be swapped merely to
    chase a newer build. Preferring the *system* zsh over Homebrew's is
    BUILDER-PROPOSED and owner-ratified: a login shell under `/opt/homebrew` locks the
-   user out if that install is removed. `BS_ZSH_PREFER=newest` opts out.
+   user out if that install is removed. `BS_ZSH_PREFER=path` opts out.
 3. **`lib/bootstrap.sh` must remain POSIX `sh`.** It runs before zsh or bash 4 is known
    to exist. Any `[[ ]]`, array, or zsh-ism in it is a defect regardless of whether it
    happens to work on the authors machine.

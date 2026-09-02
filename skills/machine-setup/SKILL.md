@@ -32,7 +32,7 @@ POSIX `sh`. Four steps, in dependency order:
 2. **zsh + a modern bash**, and zsh set as the **login shell**. The login shell
    defaults to the *system* zsh (`/bin/zsh`), not Homebrew's: a login shell under
    `/opt/homebrew` locks the user out if that install disappears.
-   `BS_ZSH_PREFER=newest` opts into the newest one instead.
+   `BS_ZSH_PREFER=path` opts into whatever `command -v zsh` finds instead.
 3. **Repos** from `repos.conf` — pulls a checkout, clones into a free path, and
    **refuses to touch anything else**. It will not move a real directory aside to
    clone over it.

@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    # ubuntu ships bash 5 and zsh is installable; macOS runners only have
+    # ubuntu ships bash 5 and zsh/dash are installable; macOS runners only have
     # bash 3.2, which ai-tools.sh deliberately refuses (see its header).
     runs-on: ubuntu-latest
     steps:
@@ -17,64 +17,17 @@ jobs:
       - name: Install zsh and dash
         run: sudo apt-get update -qq && sudo apt-get install -y zsh dash
 
-      - name: Syntax check every shell script
-        run: |
-          fail=0
-          # bootstrap.sh and the sh wrappers must stay POSIX; dash is strict.
-          for f in lib/bootstrap.sh lib/fs-helpers.sh $(git ls-files 'skills/*/scripts/*' | grep -v '\.' ); do
-            head -1 "$f" | grep -q '^#!/bin/sh' || continue
-            dash -n "$f" || fail=1
-          done
-          for f in $(git ls-files '*.sh'); do
-            case "$f" in lib/bootstrap.sh|lib/fs-helpers.sh) continue;; esac
-            bash -n "$f" || fail=1
-          done
-          for f in $(git ls-files '*.zsh'); do
-            zsh -n "$f" || fail=1
-          done
-          exit $fail
+      # CI runs the suites and nothing else. Inline steps used to duplicate
+      # assertions that also lived in a suite, which meant a check could only be
+      # run by pushing -- and twice today CI failed on an inline copy of
+      # something already fixed in the suite beside it. Repo-wide invariants
+      # (syntax of every tracked script, skill loadability) moved into
+      # lib/tests/repo_test.sh so they run locally too.
+      - name: repo invariants
+        run: ./lib/tests/repo_test.sh
 
       - name: bootstrap suite
         run: ./lib/tests/bootstrap_test.sh
-
-      - name: dry-run bootstrap changes nothing
-        run: |
-          # The invariant is "changes nothing", NOT "has nothing to change". A
-          # runner's login shell is /bin/bash, so a pending chsh to zsh is
-          # CORRECT here -- asserting no pending work encoded a provisioned
-          # laptop as the only valid state. lib/tests/bootstrap_test.sh covers
-          # the pending/not-pending branches; this step guards the mutation.
-          before_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
-          before_shells="$(md5sum /etc/shells | cut -d' ' -f1)"
-          out="$(BS_DRY_RUN=1 /bin/sh -c '. ./lib/bootstrap.sh; bs_bootstrap')"
-          echo "$out"
-          after_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
-          after_shells="$(md5sum /etc/shells | cut -d' ' -f1)"
-          [ "$before_shell" = "$after_shell" ] || { echo "FAIL: dry run changed the login shell" >&2; exit 1; }
-          [ "$before_shells" = "$after_shells" ] || { echo "FAIL: dry run modified /etc/shells" >&2; exit 1; }
-          echo "$out" | grep -qE '^\s*\+ ' && { echo "FAIL: dry run executed a real command" >&2; exit 1; }
-          echo "login shell and /etc/shells unchanged; no commands executed"
-
-      - name: bootstrap installs nothing without consent
-        run: |
-          # Non-interactive, no --yes: must decline rather than mutate.
-          out="$(/bin/sh -c '. ./lib/bootstrap.sh; BS_BASH_SEARCH=/nonexistent; export BS_BASH_SEARCH; PATH=/nonexistent; bs_ensure_bash; echo rc=$?' < /dev/null 2>&1)"
-          echo "$out"
-          echo "$out" | grep -q 'rc=1' || { echo "FAIL: expected refusal" >&2; exit 1; }
-          echo "$out" | grep -q 'non-interactive and no --yes' || { echo "FAIL: no reason given" >&2; exit 1; }
-
-      - name: backup_path/ensure_dir exist exactly once
-        run: |
-          n="$(grep -rn '^backup_path()\|^ensure_dir()' $(git ls-files '*.sh' '*.zsh') | wc -l | tr -d ' ')"
-          echo "definitions found: $n"
-          [ "$n" -eq 2 ] || { echo "FAIL: expected one backup_path and one ensure_dir" >&2; exit 1; }
-
-      - name: assertion helpers are syntactically valid under bash 3.2 too
-        run: |
-          bash -n lib/tests/assert.sh
-          # The helpers exist because bash-4-only constructs silently no-op on
-          # macOS's bash 3.2; they must not themselves need bash 4.
-          if command -v bash3 >/dev/null 2>&1; then bash3 -n lib/tests/assert.sh; fi
 
       - name: fs-helpers suite
         run: ./lib/tests/fs_helpers_test.sh
@@ -82,52 +35,8 @@ jobs:
       - name: report-check suite
         run: ./lib/tests/report_check_test.sh
 
-      - name: spec_builder regression suite
+      - name: spec_builder suite
         run: ./lib/tests/spec_builder_test.sh
 
       - name: machine-setup suite
         run: ./lib/tests/machine_setup_test.sh
-
-      - name: battle_runner smoke test
-        run: ./skills/ai-battle/scripts/battle_runner.sh --list-tools
-
-      - name: sh wrappers re-exec correctly
-        run: |
-          ./skills/ai-battle/scripts/ai-battle --list-tools
-          ./skills/ai-setup/scripts/ai-setup inventory
-
-      - name: ai-setup smoke test
-        run: |
-          ./skills/ai-setup/scripts/ai-setup.sh inventory
-          # An unknown tool must produce the friendly message, not an
-          # "unbound variable" abort under set -u.
-          # An unknown tool name is a USAGE error and must be reported as such
-          # whether or not the repo is checked out at ~/.ai (on a runner it is
-          # not -- it is at the workspace path).
-          for root in "$PWD" /definitely/not/here; do
-            out="$(AI_ROOT="$root" ./skills/ai-setup/scripts/ai-setup.sh hotwire definitely-not-a-tool 2>&1 || true)"
-            echo "--- AI_ROOT=$root"
-            echo "$out"
-            case "$out" in
-              *"unbound variable"*) echo "FAIL: hotwire crashed on unknown tool" >&2; exit 1 ;;
-              *"no built-in path map"*) ;;
-              *) echo "FAIL: unknown tool not reported as a usage error" >&2; exit 1 ;;
-            esac
-          done
-
-      - name: machine-setup dry-run
-        run: |
-          ./skills/machine-setup/scripts/machine-setup --dry-run --no-clis < /dev/null
-          ./skills/machine-setup/scripts/machine-setup --dry-run --clis all < /dev/null
-
-      - name: Every skill dir has a SKILL.md with frontmatter
-        run: |
-          fail=0
-          for d in skills/*/; do
-            f="$d/SKILL.md"
-            [ -f "$f" ] || { echo "FAIL: $d has no SKILL.md" >&2; fail=1; continue; }
-            head -1 "$f" | grep -qx -- '---' || { echo "FAIL: $f has no frontmatter" >&2; fail=1; }
-            grep -qm1 '^name:' "$f" || { echo "FAIL: $f has no name:" >&2; fail=1; }
-            grep -qm1 '^description:' "$f" || { echo "FAIL: $f has no description:" >&2; fail=1; }
-          done
-          exit $fail

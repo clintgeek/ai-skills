@@ -20,15 +20,15 @@
 #   BS_ASSUME_YES=1   install without prompting (the caller's --yes)
 #   BS_DRY_RUN=1      print every mutation, change nothing
 #   BS_NO_CHSH=1      install zsh but never touch the login shell
-#   BS_ZSH_PREFER     'system' (default) or 'newest' -- which zsh becomes the
+#   BS_ZSH_PREFER     'system' (default) or 'path' -- which zsh becomes the
 #                     login shell. 'system' keeps /bin/zsh on macOS, which
-#                     survives a broken or unmounted Homebrew; 'newest' picks
-#                     the highest version found.
+#                     survives a broken or unmounted Homebrew; 'path' takes
+#                     whatever `command -v zsh` finds. 'newest' is accepted as
+#                     a legacy alias for 'path'.
 #
 # Testing knobs (override the absolute-path candidate lists so the "nothing
 # installed yet" paths can be exercised on a machine that has everything):
 #   BS_BASH_SEARCH        candidate bash paths        (default: brew, /usr/local, /usr/bin, /bin)
-#   BS_ZSH_SEARCH         candidate zsh paths         (default: /bin, /usr/bin, /usr/local, brew)
 #   BS_SYSTEM_ZSH_SEARCH  "system" zsh paths for the login-shell preference
 
 # refuse_if_root lives in fs-helpers.sh. Sourced here so EVERY consumer of the
@@ -338,19 +338,6 @@ bs_ensure_brew() {
 # zsh
 # ---------------------------------------------------------------------------
 
-# Highest-versioned zsh on this machine, or empty. Prints "<major> <path>".
-bs_zsh_candidates() {
-  for _bs_z in ${BS_ZSH_SEARCH:-/bin/zsh /usr/bin/zsh /usr/local/bin/zsh /opt/homebrew/bin/zsh} "$(command -v zsh 2>/dev/null)"; do
-    [ -n "$_bs_z" ] || continue
-    [ -x "$_bs_z" ] || continue
-    _bs_ver="$("$_bs_z" -c 'echo ${ZSH_VERSION%%.*}' 2>/dev/null)"
-    case "$_bs_ver" in
-      ''|*[!0-9]*) continue ;;
-    esac
-    echo "$_bs_ver $_bs_z"
-  done | sort -rnu
-}
-
 bs_ensure_zsh() {
   BS_ZSH=""
   if bs_have zsh; then
@@ -379,21 +366,28 @@ bs_ensure_zsh() {
 }
 
 # Which zsh should own the login shell.
-#   system (default) -- a /bin or /usr/bin zsh if there is one. On macOS this
-#     keeps /bin/zsh (5.9), which cannot be broken by removing Homebrew. A
-#     login shell that lives in /opt/homebrew locks you out if that volume or
-#     install ever goes away.
-#   newest -- the highest version found, wherever it lives.
+#
+#   system (default)  /bin/zsh or /usr/bin/zsh. On macOS that is 5.9 and it
+#                     cannot be broken by removing Homebrew -- a login shell
+#                     under /opt/homebrew locks you out if that install goes.
+#   path (or newest)  whatever `command -v zsh` finds, i.e. whatever this PATH
+#                     already prefers. On a Mac with brew, brew's zsh.
+#
+# This used to rank candidates by version and call the result "newest". It did
+# not work: it compared MAJOR versions only, so 5.9 and 5.0 tied and the tie was
+# broken by path order, and `command -v zsh` was appended after the search list
+# so the PATH zsh won regardless. Twelve lines with one caller producing a
+# misleading answer. "newest" is still accepted, but the honest name is "path"
+# and the honest description is "whatever your PATH prefers".
 bs_preferred_login_zsh() {
-  if [ "${BS_ZSH_PREFER:-system}" != "newest" ]; then
-    for _bs_z in ${BS_SYSTEM_ZSH_SEARCH:-/bin/zsh /usr/bin/zsh}; do
-      if [ -x "$_bs_z" ]; then
-        echo "$_bs_z"
-        return 0
-      fi
-    done
-  fi
-  bs_zsh_candidates | head -1 | cut -d' ' -f2-
+  case "${BS_ZSH_PREFER:-system}" in
+    path|newest) ;;
+    *)
+      for _bs_z in ${BS_SYSTEM_ZSH_SEARCH:-/bin/zsh /usr/bin/zsh}; do
+        [ -x "$_bs_z" ] && { echo "$_bs_z"; return 0; }
+      done ;;
+  esac
+  command -v zsh 2>/dev/null
 }
 
 # Make zsh the login shell. Requires the shell to be listed in /etc/shells.

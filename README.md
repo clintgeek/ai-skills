@@ -166,11 +166,11 @@ It mutates nothing without consent: pass `--yes` (the wrappers forward it as
 | `BS_ASSUME_YES=1` | Install without prompting |
 | `BS_DRY_RUN=1` | Print every mutation, change nothing |
 | `BS_NO_CHSH=1` | Install zsh but never touch the login shell |
-| `BS_ZSH_PREFER=newest` | Use the newest zsh as login shell instead of the system one |
+| `BS_ZSH_PREFER=path` | Use whatever zsh `command -v` finds (brew's, typically) instead of the system one |
 
 By default the login shell is set to the **system** zsh (`/bin/zsh` on macOS)
 rather than Homebrew's. A login shell living under `/opt/homebrew` locks you out
-if that install is ever removed or the volume is unmounted; `BS_ZSH_PREFER=newest`
+if that install is ever removed or the volume is unmounted; `BS_ZSH_PREFER=path`
 opts into it anyway. If your login shell is already some zsh, it is left alone.
 
 Preview what it would do to the machine you are on:
