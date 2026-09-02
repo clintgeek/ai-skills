@@ -1,6 +1,13 @@
 ---
 name: machine-setup
-description: Bootstrap a bare machine to the point where an AI agent can work — Homebrew on macOS, zsh as the login shell, a modern bash, the user's repos, and their chosen AI CLIs installed and hotwired to ~/.ai. Then set the machine up conversationally: work out what is already installed and install what the user actually wants, rather than reading it from a catalog. Use when the user says "set up a new machine", "bootstrap my Mac/PC", or "what should I install on this computer".
+description: >-
+  Bootstrap a bare machine to the point where an AI agent can work — Homebrew
+  on macOS, zsh as the login shell, a modern bash, the user's repos, and their
+  chosen AI CLIs installed and hotwired to ~/.ai. Then set the machine up
+  conversationally: work out what is already installed and install what the
+  user actually wants, rather than reading it from a catalog. Use when the user
+  says "set up a new machine", "bootstrap my Mac/PC", or "what should I install
+  on this computer".
 ---
 
 # /machine-setup — New-Machine Bootstrap, then Conversational Setup

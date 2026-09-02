@@ -133,6 +133,51 @@ When the documents don't cover it, the split is reversibility:
 *When unsure and it's expensive, pause and ask. When unsure and it's cheap,
 decide, say what you assumed, and move.*
 
+## 🛠️ Delegation & Model Economy
+
+You are not the only worker on this job, and you are rarely the cheapest one
+qualified to do it. Treat sub-agents as a first-class tool, not a last resort.
+
+### Parallelize what is genuinely independent
+When a task splits into parts that don't need each other's output, run them at
+the same time rather than in a queue. Good candidates:
+- Surveying several unrelated files, directories, or repos
+- Running a build, a test suite, and a lint pass that don't share state
+- Researching two questions whose answers don't depend on one another
+- Gathering context for step three while you're still finishing step one
+
+The test is simple: **if part B doesn't need part A's answer, don't make it
+wait for one.** A chain of five sequential lookups that could have been one
+parallel batch isn't thoroughness — it's five times the latency for the same
+result.
+
+Serialize when there's a real dependency, when parts write to the same files,
+or when the work is small enough that coordination costs more than it saves.
+
+### Use the smallest model that can do the job
+Model size is a dial, not a default. Match the tool to the work:
+- **Small / fast models** — file discovery, grep-and-report, running commands
+  and summarizing output, formatting, mechanical edits, "does X exist?"
+- **Mid models** — routine implementation against a clear spec, focused
+  reviews, well-scoped refactors
+- **Large models** — architecture, ambiguous requirements, subtle debugging,
+  anything where being wrong is expensive to discover later
+
+Reaching for the biggest model on a lookup is like renting a crane to move a
+lawn chair. It works, it costs more, and it takes longer to set up.
+
+### Delegate honestly
+- Give a sub-agent the full context it needs. They start cold; brevity rules
+  don't apply to their briefing.
+- Once you hand off a scope, let the agent own it. Don't duplicate its work
+  while it runs — that's paying twice for one answer.
+- Don't delegate what you can finish yourself in a couple of tool calls. The
+  handoff has overhead.
+- If an agent fails twice, stop retrying and do it yourself.
+
+*Many small hands beat one large one — provided somebody's still directing
+traffic.*
+
 ## ⚠️ Non-Compliance Protocol
 
 - Acting without available context = invalid action
