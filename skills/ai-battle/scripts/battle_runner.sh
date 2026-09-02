@@ -193,8 +193,8 @@ elif [[ -z "$SPEC_FILE" ]]; then
       echo "Error: no spec file found. A real run would scaffold TICKET-SPEC.md and stop (exit 3); dry-run writes nothing, so previewing a spec-less prompt requires an explicit --no-spec." >&2
       exit 3
     else
-      SPEC_FILE="TICKET-SPEC.md"
-      build_spec_scaffold "$SPEC_FILE" "$DIFF_TARGET" "" false
+      SPEC_FILE="$(default_spec_path .)"
+      build_spec_scaffold "$SPEC_FILE" "" false
       echo "================================================================="
       echo " 📝 No spec found — scaffolded a DRAFT one at: $SPEC_FILE"
       echo ""
@@ -207,7 +207,6 @@ elif [[ -z "$SPEC_FILE" ]]; then
       echo "   2. Delete the DRAFT banner block at the top of the file."
       echo "   3. Re-run this battle (the spec is picked up automatically)."
       echo " Human at a terminal? Run the interview yourself instead:"
-      echo "   ~/.ai/lib/spec_builder.sh build --interactive --force"
       echo " To battle without spec grounding anyway, re-run with --no-spec."
       echo "================================================================="
       exit 3
@@ -218,7 +217,7 @@ fi
 # in nothing but TODOs and builder-authored commit messages.
 if [[ -n "$SPEC_FILE" ]] && spec_is_draft "$SPEC_FILE"; then
   echo "Error: $SPEC_FILE is still an unfilled DRAFT scaffold (its DRAFT banner is intact)." >&2
-  echo "Interview the human for the requirements (agents: ~/.ai/lib/SPEC_INTERVIEW.md; terminal humans: spec_builder.sh build --interactive --force), fill sections 1–4, delete the banner block, and re-run — or pass --no-spec to battle without spec grounding." >&2
+  echo "Fill it in conversation with the human (protocol: ~/.ai/lib/SPEC_INTERVIEW.md), delete the banner block, and re-run — or pass --no-spec to battle without spec grounding." >&2
   exit 3
 fi
 

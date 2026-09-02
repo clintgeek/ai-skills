@@ -118,12 +118,6 @@ The builder agent's job at that point is to **interview the human, not to author
 2. Write the confirmed answers into sections 1–4 and delete the DRAFT banner block at the top of the file.
 3. Show the finished spec to the human, then re-run the battle; the spec is picked up automatically.
 
-A human at a terminal can run the interview directly instead — `spec_builder.sh` prompts them for each section and, when Intent and Requirements are answered, writes a banner-free, battle-ready spec:
-
-```bash
-~/.ai/lib/spec_builder.sh ensure --interactive
-```
-
 **Repos without tickets:** the conversation that requested the work *is* the ticket. The interview reconstructs and confirms it — quote the human's original ask back as the Intent proposal, and keep their stated requirements separate from anything the builder merely inferred while coding (inferences need explicit confirmation; see the protocol's "When there is no ticket" section). Better still, don't wait for the battle: run `spec_builder.sh ensure` when the ask first lands and interview then, while the requirements are fresh — the battle picks the file up automatically later.
 
 If no requirements source exists at all and the human declines the interview, run `--no-spec` with their consent to battle without spec grounding (independent spec derivation is loudly disabled).
@@ -133,8 +127,8 @@ The same find→interview→write flow is directly invocable as the **`/spec-bui
 ```bash
 ~/.ai/lib/spec_builder.sh find                  # print existing spec path, rc 1 if none
 ~/.ai/lib/spec_builder.sh ensure                # find, else scaffold (rc 3 = new DRAFT)
-~/.ai/lib/spec_builder.sh ensure --interactive  # find, else interview the human (TTY only)
-~/.ai/lib/spec_builder.sh build --diff main...HEAD --title "PROJ-123"
+~/.ai/lib/spec_builder.sh list                  # every spec in the project
+~/.ai/lib/spec_builder.sh build --title "PROJ-123"
 ```
 
 ---

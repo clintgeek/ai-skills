@@ -3,7 +3,7 @@
 Shared protocol for any skill that needs a specification and doesn't have one
 (`lib/spec_builder.sh` exit code 3, a spec with its DRAFT banner intact, or a
 human asking for help writing a spec). Terminal humans can answer
-`spec_builder.sh build --interactive` directly; **you cannot** — an agent
+a TTY prompt loop; there no longer is one — the interview is this conversation, and an agent
 session has no TTY for the script's prompts, so you conduct the interview in
 conversation and write the answers into the spec yourself.
 

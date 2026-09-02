@@ -37,33 +37,71 @@ echo b >> a.txt && git commit -qam "second"
 
 echo "== core =="
 "$SB" find >/dev/null 2>&1;                       check "find with no spec exits 1" 1 $?
-"$SB" ensure >/dev/null 2>&1;                     check "ensure scaffolds a DRAFT and exits 3" 3 $?
+"$SB" ensure --out TICKET-SPEC.md >/dev/null 2>&1;                     check "ensure scaffolds a DRAFT and exits 3" 3 $?
 grep -q "Status: DRAFT" TICKET-SPEC.md;           assert "scaffold carries the DRAFT banner" $?
-grep -q "TEST-1" TICKET-SPEC.md;                  assert "scaffold collected ticket-id evidence" $?
-"$SB" build >/dev/null 2>&1;                      check "build refuses to overwrite without --force" 1 $?
+# The scaffold is deliberately EMPTY now: git evidence (branch, commits,
+# diffstat, ticket ids) is the builder's account of its own work, and it anchored
+# the conversation on the implementation before the human had said anything.
+! grep -q "TEST-1" TICKET-SPEC.md;               assert "scaffold contains NO git evidence" $?
+! grep -qi "diffstat\|Commit messages" TICKET-SPEC.md; assert "  and no commit/diffstat block" $?
+grep -q "## 1. Intent" TICKET-SPEC.md;           assert "  but does carry the 4-section skeleton" $?
+"$SB" build --out TICKET-SPEC.md >/dev/null 2>&1; check "build refuses to overwrite without --force" 1 $?
 # The documented contract is "3 = what was written is still a DRAFT". This used
 # to be gated on --interactive, so a plain `build` reported success for a
 # TODO-only scaffold and a caller could treat a placeholder as a real spec.
 # Run in a scratch subdirectory: the checks below this block depend on $WORK
 # still holding an unfilled DRAFT, so this must not touch it.
 mkdir -p "$WORK/buildprobe" && pushd "$WORK/buildprobe" >/dev/null
-"$SB" build >/dev/null 2>&1;                      check "build of a DRAFT exits 3, not 0" 3 $?
+"$SB" build --out TICKET-SPEC.md >/dev/null 2>&1;                      check "build of a DRAFT exits 3, not 0" 3 $?
 grep -q "Status: DRAFT" TICKET-SPEC.md;           assert "  and the file really is a draft" $?
 rm -f TICKET-SPEC.md
 bash -c "source '$SB'
 SPEC_INTENT='Filled.'
 SPEC_REQUIREMENTS='1. Filled.'
-_spec_builder_main build" >/dev/null 2>&1
+_spec_builder_main build --out TICKET-SPEC.md" >/dev/null 2>&1
 check "build of a complete spec exits 0" 0 $?
 popd >/dev/null
 
+echo "== discovery searches the PROJECT, not one directory =="
+# It only ever looked in "." — which missed DOCS/, where this repo keeps all
+# three of its own specs. "Find a spec in the project" was a coin flip.
+mkdir -p sub/DOCS sub/src
+printf '# Specification: thing\n\n## 1. Intent\nreal\n' > sub/DOCS/TICKET-SPEC.md
+out="$("$SB" find --dir sub)"
+check "finds a spec in DOCS/" "sub/DOCS/TICKET-SPEC.md" "$out"
+# Control: it must NOT find one where there is none.
+mkdir -p empty/src
+"$SB" find --dir empty >/dev/null 2>&1
+check "  (control) finds nothing in a project without one" 1 $?
+
+# list shows EVERY match, because a project may have several and only the human
+# knows which governs the work.
+printf '# Specification: other\n' > sub/DOCS/THE_SPEC.md
+n="$("$SB" list --dir sub | wc -l | tr -d ' ')"
+check "list reports every spec it found" 2 "$n"
+
+# A new spec belongs where the project keeps docs.
+out="$(bash -c "source '$SB'; default_spec_path sub")"
+check "a new spec lands in DOCS/ when it exists" "sub/DOCS/TICKET-SPEC.md" "$out"
+out="$(bash -c "source '$SB'; default_spec_path empty")"
+check "  and in the root when it does not" "empty/TICKET-SPEC.md" "$out"
+
+echo "== there is no --interactive =="
+# It was a TTY prompt loop nothing could run: this repo's entry point is an
+# agent, and the script refused without a terminal. The interview is a
+# conversation now (skills/spec-builder/SKILL.md).
+"$SB" build --interactive --out /dev/null >/dev/null 2>&1
+check "--interactive is rejected as an unknown flag" 1 $?
+! grep -q "run_spec_interview" "$SB"
+assert "  and the TTY interview function is gone" $?
+
 echo "== F1: stale draft must not satisfy ensure =="
-"$SB" ensure >/dev/null 2>&1;                     check "ensure on an existing unfilled DRAFT exits 3" 3 $?
+"$SB" ensure --out TICKET-SPEC.md >/dev/null 2>&1;                     check "ensure on an existing unfilled DRAFT exits 3" 3 $?
 bash -c "source '$SB'
 SPEC_INTENT='Test intent.'
 SPEC_REQUIREMENTS='1. Testable requirement.'
-build_spec_scaffold TICKET-SPEC.md HEAD~1..HEAD '' true"
-"$SB" ensure >/dev/null 2>&1;                     check "ensure on a completed spec exits 0" 0 $?
+build_spec_scaffold TICKET-SPEC.md '' true"
+"$SB" ensure --out TICKET-SPEC.md >/dev/null 2>&1;                     check "ensure on a completed spec exits 0" 0 $?
 bash -c "source '$SB'; spec_is_draft TICKET-SPEC.md"
 check "completed spec has no DRAFT banner" 1 $?
 
