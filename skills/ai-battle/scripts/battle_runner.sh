@@ -456,7 +456,7 @@ require_argv_prompt() {
   local size
   size="$(wc -c < "$PROMPT_FILE")"
   if (( size > 100000 )); then
-    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec, or pick an opponent that takes a file/stdin (devin, codex)." >&2
+    echo "Error: prompt is ${size} bytes and $OPPONENT only accepts prompts via argv (ARG_MAX risk, process-list exposure). Shrink the diff/spec, or pick an opponent that takes a file/stdin (devin, claude, agy, codex)." >&2
     exit 1
   fi
 }
@@ -479,12 +479,11 @@ case "$OPPONENT" in
     dispatch claude -p --permission-mode plan < "$PROMPT_FILE"
     ;;
   agy)
-    # `agy -p -` does NOT read stdin: the "-" is taken as the literal prompt
-    # text, so the model replies "How can I help you today?" and never sees the
-    # diff. `agy -p` with no argument just prints help. The prompt must arrive
-    # as an argv argument, which puts agy behind the size guard.
-    require_argv_prompt
-    dispatch agy -p "$(cat "$PROMPT_FILE")"
+    # When stdin is redirected, agy reads the entire prompt from stdin, runs
+    # non-interactively, and exits cleanly. This streams prompt files of any size
+    # without argv/ARG_MAX limits. --mode plan enforces read-only review, and
+    # --sandbox restricts terminal execution to keep untrusted diffs contained.
+    dispatch agy --mode plan --sandbox < "$PROMPT_FILE"
     ;;
   copilot)
     # No --prompt-file support yet (github/copilot-cli#3398); default mode

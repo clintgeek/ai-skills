@@ -299,7 +299,7 @@ A "no" in `Known` means the path has not been verified on a real install. Use `h
 3. **No auto-install without explicit consent.** `install <tool>` prints the command. `--yes` is required to run it.
 4. **No secrets in this repo.** `.gitignore` covers `.env`, `*.key`, `*.pem`, `secrets/`, `.ssh/`, and backup directories.
 5. **Prompt size guards.** `ai-battle` refuses to pass >100KB prompts via argv to tools that cannot accept stdin or files.
-6. **Challengers run read-only.** Devin `--permission-mode auto` (read-only tools only), Claude `--permission-mode plan`, Codex `exec --sandbox read-only`. Never loosen these — the diff is untrusted input.
+6. **Challengers run read-only.** Devin `--permission-mode auto` (read-only tools only), Claude `--permission-mode plan`, AGY `--mode plan --sandbox`, Codex `exec --sandbox read-only`. Never loosen these — the diff is untrusted input.
 7. **No battles against empty specs.** A missing spec is scaffolded as a DRAFT and the battle exits for the builder to fill in real requirements — before challenger selection, so the scaffold happens even with no eligible opponent installed; unfilled DRAFT scaffolds are refused, spec-less `--dry-run` included; `--no-spec` is the only opt-out and warns loudly.
 
 ---

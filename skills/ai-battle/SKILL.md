@@ -63,7 +63,7 @@ The runner's `discover_tools` function scans PATH (`command -v`) against a regis
 | :--- | :--- | :--- | :--- |
 | `devin` | Cognition Devin CLI | cognition | `-p --permission-mode auto --prompt-file <f>` |
 | `claude` | Anthropic Claude Code | anthropic | `-p --permission-mode plan` (stdin) |
-| `agy` | Google Antigravity CLI | google | `-p "<prompt>"` (argv; `-p -` does NOT read stdin) |
+| `agy` | Google Antigravity CLI | google | `--mode plan --sandbox` (stdin) |
 | `copilot` | GitHub Copilot CLI | github | `-p "<prompt>"` (no prompt-file support yet) |
 | `codex` | OpenAI Codex CLI | openai | `exec --sandbox read-only -` (stdin) |
 | `opencode` | opencode (model-agnostic) | opencode | `run "<prompt>"` |
@@ -193,8 +193,8 @@ A pre-packaged helper script handles tool discovery, git diff extraction, spec a
 Safety behavior built into the runner:
 * **No silent self-battle.** If the only CLI on PATH matches the caller (or `--opponent` names the caller), the runner refuses and exits; `--allow-self` is the explicit escape hatch.
 * **Loud diff failures.** If `git diff <target>` fails, the runner errors out instead of silently falling back to a different changeset.
-* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode auto` (its modes are auto/accept-edits/smart/dangerous; `auto` auto-approves read-only tools only, so edits stay gated — and there is no `normal`, which is why the earlier value denied even reads), Claude with `--permission-mode plan`, codex with `--sandbox read-only`. Never loosen these — the diff is untrusted input.
-* **Argv size guard.** Tools with no stdin/file input (copilot, opencode, agy) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
+* **Read-only challenger.** Every tool uses its most restrictive review mode: Devin runs with `--permission-mode auto` (its modes are auto/accept-edits/smart/dangerous; `auto` auto-approves read-only tools only, so edits stay gated — and there is no `normal`, which is why the earlier value denied even reads), Claude with `--permission-mode plan`, agy with `--mode plan --sandbox`, codex with `--sandbox read-only`. Never loosen these — the diff is untrusted input.
+* **Argv size guard.** Tools with no stdin/file input (copilot, opencode) receive the prompt via argv only when it is under 100KB; larger prompts are refused loudly (ARG_MAX, process-list exposure).
 * **Timeout.** The challenger is killed after `--timeout` seconds (default 900).
 * **Verbatim report.** The challenger's stdout is tee'd to the `--report` file for the human, unfiltered by the builder; stderr diagnostics (auth failures, rate limits) are kept in a companion `.stderr.log`.
 * **No false success (exit 4).** A challenger exiting 0 is not evidence it reviewed anything — a permission refusal, an empty file, or prose with no findings all exit clean. `lib/report-check.sh` rejects an empty or trivial report, one with no severity findings, and one whose output (or stderr) carries a blocked-by-permissions signature, and the runner then exits **4** with a loud "NO REVIEW PRODUCED" banner. A report whose summary claims more findings than it writes out is flagged as **truncated** but still returned — what arrived is real. **"No review" and "no findings" are not the same thing**, and the runner used to print `✅ Battle complete` over a 0-byte file.
@@ -214,7 +214,7 @@ The challenger is a **reviewer, not an editor** — always invoke it read-only, 
   ```
 * **Attacking via AGY:**
   ```bash
-  timeout 900 agy -p "$(cat "$PROMPT_FILE")" | tee "$REPORT_FILE"
+  timeout 900 agy --mode plan --sandbox < "$PROMPT_FILE" | tee "$REPORT_FILE"
   ```
 
 ---
