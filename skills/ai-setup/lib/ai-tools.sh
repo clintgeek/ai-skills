@@ -92,7 +92,7 @@ TOOL_SKILLS[devin]="$HOME/.config/devin/skills"
 TOOL_SKILLS[claude]="$HOME/.claude/skills"
 TOOL_SKILLS[agy]="$HOME/.antigravity/skills"
 TOOL_SKILLS[copilot]="$HOME/.copilot/skills"
-TOOL_SKILLS[codex]="$HOME/.codex/skills"
+TOOL_SKILLS[codex]="$HOME/.agents/skills"
 TOOL_SKILLS[opencode]="$HOME/.opencode/skills"
 
 declare -A TOOL_LAWS
@@ -100,7 +100,7 @@ TOOL_LAWS[devin]="$HOME/.config/devin/global_rules.md"
 TOOL_LAWS[claude]="$HOME/.claude/CLAUDE.md"
 TOOL_LAWS[agy]="$HOME/.antigravity/global_rules.md"
 TOOL_LAWS[copilot]="$HOME/.copilot/copilot-instructions.md"
-TOOL_LAWS[codex]="$HOME/.codex/global_rules.md"
+TOOL_LAWS[codex]="$HOME/.codex/AGENTS.md"
 TOOL_LAWS[opencode]="$HOME/.opencode/global_rules.md"
 
 declare -A TOOL_KNOWN
@@ -108,7 +108,7 @@ TOOL_KNOWN[devin]=1
 TOOL_KNOWN[claude]=1
 TOOL_KNOWN[copilot]=1
 TOOL_KNOWN[agy]=1
-TOOL_KNOWN[codex]=0
+TOOL_KNOWN[codex]=1
 TOOL_KNOWN[opencode]=1
 
 # Tool metadata helpers (same names as the originals in ai-battle for easy sourcing).
