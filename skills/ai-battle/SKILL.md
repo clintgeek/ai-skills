@@ -110,7 +110,7 @@ installers are displayed but never auto-executed from a POSIX shell.
 
 ### When no spec exists: build one first
 
-Spec discovery and scaffolding live in the **shared** `~/.ai/lib/spec_builder.sh` (usable by any skill, as a CLI or by sourcing its functions). If `battle_runner.sh` finds no spec, it scaffolds a DRAFT `TICKET-SPEC.md` — pre-filled with neutral git evidence (branch, commit subjects, diffstat, detected ticket IDs) and TODO requirement sections — and **exits with code 3 instead of battling**. An unfilled scaffold grounds the review in nothing, so the runner also refuses any spec whose DRAFT banner is still intact.
+Spec discovery and scaffolding live in the **shared** `~/.ai/lib/spec_builder.sh` (usable by any skill, as a CLI or by sourcing its functions). If `battle_runner.sh` finds no spec, it scaffolds an **empty** DRAFT `TICKET-SPEC.md` — no git evidence, nothing pre-filled from the code, just TODO sections — and **exits with code 3 instead of battling**. An unfilled scaffold grounds the review in nothing, so the runner also refuses any spec whose DRAFT banner is still intact.
 
 The builder agent's job at that point is to **interview the human, not to author the requirements itself** — full protocol in `~/.ai/lib/SPEC_INTERVIEW.md`:
 

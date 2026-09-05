@@ -52,7 +52,7 @@ For each installed tool:
 
 Use `~/.ai/skills/ai-setup/scripts/ai-setup hotwire <tool>` for each known tool. Use `hotwire-generic <tool> <skills-path> <laws-path>` for tools not in the built-in map.
 
-Always prefer the built-in map for the 11 above. Ask the user before running `hotwire-generic`.
+Always prefer the built-in map for the 6 above. Ask the user before running `hotwire-generic`.
 
 ## 4. Install missing tools
 
